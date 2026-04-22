@@ -1,0 +1,250 @@
+/**
+ * Tests for Passkey JS bridge interface.
+ *
+ * Tests the JS API surface, type contracts, error handling, and encoding
+ * helpers. Native-side passkey operations require a real device and cannot
+ * be exercised in a Node test runner.
+ */
+
+// Mock NativeModules — native module absent
+jest.mock('react-native', () => ({
+  NativeModules: { VelaPasskey: null },
+  NativeEventEmitter: jest.fn().mockImplementation(() => ({
+    addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+    removeAllListeners: jest.fn(),
+  })),
+  Platform: { OS: 'ios' },
+}));
+
+import {
+  isSupported,
+  register,
+  authenticate,
+  sign,
+  encodeUserID,
+  decodeUserName,
+  RELYING_PARTY,
+  PasskeyErrorCode,
+  type PasskeyRegistrationResult,
+  type PasskeyAssertionResult,
+} from '@/modules/passkey';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+describe('Passkey constants', () => {
+  test('RELYING_PARTY matches native implementations', () => {
+    expect(RELYING_PARTY).toBe('getvela.app');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error codes
+// ---------------------------------------------------------------------------
+
+describe('PasskeyErrorCode', () => {
+  test('defines all required error codes', () => {
+    expect(PasskeyErrorCode.CANCELLED).toBe('PASSKEY_CANCELLED');
+    expect(PasskeyErrorCode.FAILED).toBe('PASSKEY_FAILED');
+    expect(PasskeyErrorCode.NO_CREDENTIAL).toBe('PASSKEY_NO_CREDENTIAL');
+    expect(PasskeyErrorCode.NOT_SUPPORTED).toBe('PASSKEY_NOT_SUPPORTED');
+    expect(PasskeyErrorCode.NOT_AVAILABLE).toBe('PASSKEY_NOT_AVAILABLE');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UserID encoding — pure JS, testable without native module
+// ---------------------------------------------------------------------------
+
+describe('encodeUserID', () => {
+  test('encodes name with null byte separator and UUID suffix', () => {
+    const encoded = encodeUserID('Alice');
+    expect(encoded).toContain('Alice');
+    expect(encoded).toContain('\0');
+    // Should have name + \0 + UUID (36 chars)
+    const parts = encoded.split('\0');
+    expect(parts[0]).toBe('Alice');
+    expect(parts[1].length).toBe(36); // UUID format
+  });
+
+  test('different calls produce different UUIDs', () => {
+    const a = encodeUserID('Alice');
+    const b = encodeUserID('Alice');
+    expect(a).not.toBe(b); // UUID portion differs
+  });
+
+  test('handles empty name', () => {
+    const encoded = encodeUserID('');
+    expect(encoded.startsWith('\0')).toBe(true);
+  });
+
+  test('handles unicode names', () => {
+    const encoded = encodeUserID('Vela');
+    expect(encoded).toContain('Vela');
+  });
+});
+
+describe('decodeUserName', () => {
+  test('extracts name before null byte', () => {
+    const name = decodeUserName('Alice\0some-uuid-here');
+    expect(name).toBe('Alice');
+  });
+
+  test('returns full string if no null byte', () => {
+    const name = decodeUserName('Alice');
+    expect(name).toBe('Alice');
+  });
+
+  test('handles empty name before null byte', () => {
+    const name = decodeUserName('\0uuid');
+    expect(name).toBe('');
+  });
+
+  test('roundtrips with encodeUserID', () => {
+    const encoded = encodeUserID('Bob');
+    const decoded = decodeUserName(encoded);
+    expect(decoded).toBe('Bob');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// API — native module absent (graceful failure)
+// ---------------------------------------------------------------------------
+
+describe('Passkey API (native module absent)', () => {
+  test('isSupported returns false', async () => {
+    const result = await isSupported();
+    expect(result).toBe(false);
+  });
+
+  test('register rejects with NOT_AVAILABLE', async () => {
+    await expect(register('Alice')).rejects.toMatchObject({
+      code: PasskeyErrorCode.NOT_AVAILABLE,
+    });
+  });
+
+  test('authenticate rejects with NOT_AVAILABLE', async () => {
+    await expect(authenticate()).rejects.toMatchObject({
+      code: PasskeyErrorCode.NOT_AVAILABLE,
+    });
+  });
+
+  test('sign rejects with NOT_AVAILABLE', async () => {
+    await expect(sign('deadbeef')).rejects.toMatchObject({
+      code: PasskeyErrorCode.NOT_AVAILABLE,
+    });
+  });
+
+  test('sign with credentialId rejects with NOT_AVAILABLE', async () => {
+    await expect(sign('deadbeef', 'cred123')).rejects.toMatchObject({
+      code: PasskeyErrorCode.NOT_AVAILABLE,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// API — with mocked native module
+// ---------------------------------------------------------------------------
+
+describe('Passkey API (native module present)', () => {
+  const mockRegResult: PasskeyRegistrationResult = {
+    credentialId: 'abc123',
+    attestationObjectHex: 'a163666d74...',
+    clientDataJSONHex: '7b22747970...',
+  };
+
+  const mockAssertResult: PasskeyAssertionResult = {
+    credentialId: 'abc123',
+    signatureHex: '3045022100...',
+    authenticatorDataHex: '49960de5...',
+    clientDataJSONHex: '7b22747970...',
+    userIdHex: '416c696365...',
+  };
+
+  let Passkey: typeof import('@/modules/passkey');
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('react-native', () => ({
+      NativeModules: {
+        VelaPasskey: {
+          isSupported: jest.fn().mockResolvedValue(true),
+          register: jest.fn().mockResolvedValue(mockRegResult),
+          authenticate: jest.fn().mockResolvedValue(mockAssertResult),
+          sign: jest.fn().mockResolvedValue(mockAssertResult),
+        },
+      },
+      NativeEventEmitter: jest.fn().mockImplementation(() => ({
+        addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+        removeAllListeners: jest.fn(),
+      })),
+      Platform: { OS: 'ios' },
+    }));
+    Passkey = require('@/modules/passkey');
+  });
+
+  test('isSupported returns true', async () => {
+    expect(await Passkey.isSupported()).toBe(true);
+  });
+
+  test('register passes userName and returns result', async () => {
+    const result = await Passkey.register('Alice');
+    expect(result).toEqual(mockRegResult);
+
+    const { NativeModules } = require('react-native');
+    expect(NativeModules.VelaPasskey.register).toHaveBeenCalledWith('Alice');
+  });
+
+  test('authenticate returns assertion result', async () => {
+    const result = await Passkey.authenticate();
+    expect(result).toEqual(mockAssertResult);
+  });
+
+  test('sign passes challenge hex', async () => {
+    const result = await Passkey.sign('deadbeef');
+    expect(result).toEqual(mockAssertResult);
+
+    const { NativeModules } = require('react-native');
+    expect(NativeModules.VelaPasskey.sign).toHaveBeenCalledWith('deadbeef', null);
+  });
+
+  test('sign passes credentialId when provided', async () => {
+    await Passkey.sign('deadbeef', 'cred123');
+
+    const { NativeModules } = require('react-native');
+    expect(NativeModules.VelaPasskey.sign).toHaveBeenCalledWith('deadbeef', 'cred123');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Type shape (compile-time, verified at runtime for documentation)
+// ---------------------------------------------------------------------------
+
+describe('Type contracts', () => {
+  test('PasskeyRegistrationResult shape', () => {
+    const result: PasskeyRegistrationResult = {
+      credentialId: 'hex',
+      attestationObjectHex: 'hex',
+      clientDataJSONHex: 'hex',
+    };
+    expect(result.credentialId).toBeDefined();
+    expect(result.attestationObjectHex).toBeDefined();
+    expect(result.clientDataJSONHex).toBeDefined();
+  });
+
+  test('PasskeyAssertionResult shape', () => {
+    const result: PasskeyAssertionResult = {
+      credentialId: 'hex',
+      signatureHex: 'hex',
+      authenticatorDataHex: 'hex',
+      clientDataJSONHex: 'hex',
+    };
+    expect(result.credentialId).toBeDefined();
+    expect(result.signatureHex).toBeDefined();
+    expect(result.authenticatorDataHex).toBeDefined();
+    expect(result.clientDataJSONHex).toBeDefined();
+    // userIdHex is optional
+    expect(result.userIdHex).toBeUndefined();
+  });
+});
