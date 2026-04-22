@@ -11,6 +11,7 @@ import { extractPublicKey } from '@/services/attestation-parser';
 import { fromHex, toHex } from '@/services/hex';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
+import { uploadPublicKey } from '@/services/public-key-upload';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -66,7 +67,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       };
       await saveAccount(account);
 
-      // 6. Save pending upload for public key index server
+      // 6. Save pending upload (in case upload fails, can retry later)
       await savePendingUpload({
         id: registration.credentialId,
         name: trimmed,
@@ -75,10 +76,21 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
         createdAt: new Date().toISOString(),
       });
 
-      // 7. Update wallet state and navigate
+      // 7. Update wallet state and navigate (don't block on upload)
       dispatch({ type: 'ADD_ACCOUNT', account });
       onCreated?.(address, trimmed);
       router.replace('/(tabs)/wallet');
+
+      // 8. Upload public key to index server (background, non-blocking)
+      //    Triggers a second biometric prompt for the signing challenge.
+      //    If it fails, it stays in pendingUploads for retry on next launch.
+      uploadPublicKey({
+        credentialId: registration.credentialId,
+        publicKeyHex,
+        name: trimmed,
+      }).catch(() => {
+        // Upload failed — will retry on next app launch
+      });
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {

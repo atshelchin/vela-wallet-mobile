@@ -1,11 +1,23 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { WalletProvider } from '@/models/wallet-state';
+import { retryPendingUploads } from '@/services/public-key-upload';
+import { hasPendingUploads } from '@/services/storage';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  // Retry any failed public key uploads on app launch
+  useEffect(() => {
+    hasPendingUploads().then((has) => {
+      if (has) {
+        retryPendingUploads().catch(() => {});
+      }
+    });
+  }, []);
+
   return (
     <WalletProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
