@@ -35,8 +35,8 @@ import { derSignatureToRaw } from './attestation-parser';
 
 const VERIFICATION_GAS_DEPLOYED = 300_000n;
 const VERIFICATION_GAS_UNDEPLOYED = 600_000n;
-const CALL_GAS_LIMIT = 150_000n;
-const PRE_VERIFICATION_GAS = 60_000n;
+const CALL_GAS_LIMIT = 500_000n;  // 500k — swap/complex calls need more
+const PRE_VERIFICATION_GAS = 80_000n;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -176,21 +176,32 @@ async function sendUserOp(
   // 7. Estimate gas via bundler
   try {
     const estimated = await estimateGas(userOp, chainId);
+    console.log('[UserOp] Gas estimate:', {
+      verificationGasLimit: estimated.verificationGasLimit.toString(),
+      callGasLimit: estimated.callGasLimit.toString(),
+      preVerificationGas: estimated.preVerificationGas.toString(),
+    });
     userOp.verificationGasLimit = bigintMax(
       userOp.verificationGasLimit,
-      (estimated.verificationGasLimit * 13n) / 10n,
+      (estimated.verificationGasLimit * 15n) / 10n, // 1.5x safety margin
     );
     userOp.callGasLimit = bigintMax(
       userOp.callGasLimit,
-      (estimated.callGasLimit * 13n) / 10n,
+      (estimated.callGasLimit * 15n) / 10n, // 1.5x safety margin
     );
     userOp.preVerificationGas = bigintMax(
       userOp.preVerificationGas,
-      estimated.preVerificationGas + 5000n,
+      estimated.preVerificationGas + 10000n,
     );
-  } catch {
-    // Use default gas values
+  } catch (err) {
+    console.error('[UserOp] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
   }
+  console.log('[UserOp] Final gas:', {
+    verificationGasLimit: userOp.verificationGasLimit.toString(),
+    callGasLimit: userOp.callGasLimit.toString(),
+    preVerificationGas: userOp.preVerificationGas.toString(),
+    maxFeePerGas: userOp.maxFeePerGas.toString(),
+  });
 
   // 8. Calculate SafeOp hash (EIP-712)
   const safeOpHash = calculateSafeOpHash(userOp, chainId);
