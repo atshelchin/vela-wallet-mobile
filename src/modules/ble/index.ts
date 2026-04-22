@@ -112,10 +112,25 @@ export async function requestPermissions(): Promise<boolean> {
   return VelaBLE.requestPermissions();
 }
 
+/**
+ * Map the JS-friendly config into the wire format the Chrome extension expects.
+ *
+ * Chrome reads: { address, name, chainId, accounts: [{name, address}] }
+ * JS passes:    { walletAddress, accountName, chainId, accounts }
+ */
+function toWireFormat(config: BLEAdvertisingConfig): Record<string, unknown> {
+  return {
+    address: config.walletAddress,
+    name: config.accountName,
+    chainId: config.chainId,
+    accounts: config.accounts ?? [],
+  };
+}
+
 /** Start advertising as a Vela Wallet peripheral. */
 export async function startAdvertising(config: BLEAdvertisingConfig): Promise<void> {
   assertNativeModule();
-  return VelaBLE.startAdvertising(config);
+  return VelaBLE.startAdvertising(toWireFormat(config));
 }
 
 /** Stop advertising. */
@@ -127,7 +142,7 @@ export async function stopAdvertising(): Promise<void> {
 /** Update wallet info (when account/chain changes while already advertising). */
 export async function updateWalletInfo(config: BLEAdvertisingConfig): Promise<void> {
   assertNativeModule();
-  return VelaBLE.updateWalletInfo(config);
+  return VelaBLE.updateWalletInfo(toWireFormat(config));
 }
 
 /** Send a response back to the connected central. */
