@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { generateQRMatrix } from '@/services/qrcode';
+import QRCodeLib from 'qrcode';
 
 interface Props {
   value: string;
@@ -10,7 +10,26 @@ interface Props {
 }
 
 export function QRCode({ value, size = 200, color = '#000000', backgroundColor = '#FFFFFF' }: Props) {
-  const matrix = useMemo(() => generateQRMatrix(value), [value]);
+  const matrix = useMemo(() => {
+    try {
+      const segments = QRCodeLib.create(value, { errorCorrectionLevel: 'M' });
+      const modules = segments.modules;
+      const moduleCount = modules.size;
+      const data = modules.data;
+      const rows: boolean[][] = [];
+      for (let y = 0; y < moduleCount; y++) {
+        const row: boolean[] = [];
+        for (let x = 0; x < moduleCount; x++) {
+          row.push(data[y * moduleCount + x] === 1);
+        }
+        rows.push(row);
+      }
+      return rows;
+    } catch {
+      return [[true]];
+    }
+  }, [value]);
+
   const moduleSize = size / matrix.length;
 
   return (
