@@ -103,6 +103,23 @@ function withIOSSourceFiles(config) {
         }
       }
 
+      // Patch the bridging header so Swift can see React Native types
+      const bridgingHeader = path.join(destDir, `${projectName}-Bridging-Header.h`);
+      if (fs.existsSync(bridgingHeader)) {
+        let content = fs.readFileSync(bridgingHeader, 'utf8');
+        const requiredImports = [
+          '#import <React/RCTBridgeModule.h>',
+          '#import <React/RCTEventEmitter.h>',
+          '#import <React/RCTViewManager.h>',
+        ];
+        for (const imp of requiredImports) {
+          if (!content.includes(imp)) {
+            content += `\n${imp}`;
+          }
+        }
+        fs.writeFileSync(bridgingHeader, content, 'utf8');
+      }
+
       return mod;
     },
   ]);
