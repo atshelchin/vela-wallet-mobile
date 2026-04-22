@@ -350,16 +350,14 @@ function withXcodeProjectFiles(config) {
     for (const fileName of nativeFiles) {
       // Skip if already in project
       const alreadyAdded = Object.values(project.hash.project.objects.PBXFileReference || {})
-        .some((ref) => typeof ref === 'object' && ref.name === fileName);
+        .some((ref) => typeof ref === 'object' && (ref.name === fileName || ref.path === fileName));
 
       if (alreadyAdded) continue;
 
-      const filePath = fileName;
-      if (fileName.endsWith('.swift')) {
-        project.addSourceFile(filePath, { target: project.getFirstTarget().uuid }, appGroupKey);
-      } else if (fileName.endsWith('.m')) {
-        project.addSourceFile(filePath, { target: project.getFirstTarget().uuid }, appGroupKey);
-      }
+      // Path must be relative to the group's sourceTree.
+      // For the app group, files are at <projectName>/<file> relative to ios/
+      const filePath = `${projectName}/${fileName}`;
+      project.addSourceFile(filePath, { target: project.getFirstTarget().uuid }, appGroupKey);
     }
 
     return mod;
