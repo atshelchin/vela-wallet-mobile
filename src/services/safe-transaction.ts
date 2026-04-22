@@ -534,7 +534,9 @@ async function isDeployed(
 ): Promise<boolean> {
   const response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
   const result = response.result as string | undefined;
-  return !!result && result !== '0x' && result.length > 2;
+  const deployed = !!result && result !== '0x' && result.length > 2;
+  console.log('[UserOp] isDeployed:', deployed, 'code length:', result?.length ?? 0);
+  return deployed;
 }
 
 async function getNonce(
@@ -603,15 +605,24 @@ async function estimateGas(
   userOp: UserOperation,
   chainId: number,
 ): Promise<GasEstimate> {
+  const dict = userOpToDict(userOp);
+  console.log('[UserOp] Estimating gas, sender:', dict.sender, 'nonce:', dict.nonce);
+
   const response = await rpcCall(
     'eth_estimateUserOperationGas',
-    [userOpToDict(userOp), ENTRY_POINT],
+    [dict, ENTRY_POINT],
     chainId,
   );
 
+  if (response.error) {
+    console.error('[UserOp] Estimation RPC error:', JSON.stringify(response.error));
+    throw new Error(response.error.message ?? 'Gas estimation failed');
+  }
+
   const result = response.result as Record<string, string> | undefined;
   if (!result) {
-    throw new Error('Failed to estimate gas');
+    console.error('[UserOp] Estimation returned empty result:', JSON.stringify(response));
+    throw new Error('Failed to estimate gas — empty result');
   }
 
   return {
