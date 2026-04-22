@@ -87,13 +87,20 @@ function withIOSSourceFiles(config) {
     (mod) => {
       const projectRoot = mod.modRequest.projectRoot;
       const projectName = mod.modRequest.projectName || 'velawallet';
-      const iosDir = path.join(projectRoot, 'ios', projectName, 'NativeModules');
+      // Copy directly into the project root so Xcode compiles them automatically.
+      // Subdirectories under ios/<project>/ are NOT auto-included in the build.
+      const destDir = path.join(projectRoot, 'ios', projectName);
 
       const modules = ['vela-ble', 'vela-passkey', 'vela-cloud-sync'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
-        const destDir = path.join(iosDir, moduleName);
-        copyFilesRecursive(srcDir, destDir);
+        if (!fs.existsSync(srcDir)) continue;
+        for (const file of fs.readdirSync(srcDir)) {
+          fs.copyFileSync(
+            path.join(srcDir, file),
+            path.join(destDir, file),
+          );
+        }
       }
 
       return mod;
