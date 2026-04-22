@@ -3,6 +3,7 @@ const {
   withEntitlementsPlist,
   withAndroidManifest,
   withDangerousMod,
+  withXcodeProject,
 } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
@@ -320,6 +321,52 @@ function registerAndroidPackages(projectRoot) {
 }
 
 // ---------------------------------------------------------------------------
+// iOS – Add native module files to Xcode project (pbxproj)
+// ---------------------------------------------------------------------------
+
+function withXcodeProjectFiles(config) {
+  return withXcodeProject(config, (mod) => {
+    const project = mod.modResults;
+    const projectName = mod.modRequest.projectName || 'velawallet';
+
+    // Find the main group for the app target
+    const mainGroup = project.getFirstProject().firstProject.mainGroup;
+    const appGroupKey = Object.keys(project.hash.project.objects.PBXGroup)
+      .find((key) => {
+        const group = project.hash.project.objects.PBXGroup[key];
+        return typeof group === 'object' && group.name === projectName;
+      });
+
+    // Native module files to add
+    const nativeFiles = [
+      'VelaBLEModule.swift',
+      'VelaBLEModule.m',
+      'VelaPasskeyModule.swift',
+      'VelaPasskeyModule.m',
+      'VelaCloudSyncModule.swift',
+      'VelaCloudSyncModule.m',
+    ];
+
+    for (const fileName of nativeFiles) {
+      // Skip if already in project
+      const alreadyAdded = Object.values(project.hash.project.objects.PBXFileReference || {})
+        .some((ref) => typeof ref === 'object' && ref.name === fileName);
+
+      if (alreadyAdded) continue;
+
+      const filePath = fileName;
+      if (fileName.endsWith('.swift')) {
+        project.addSourceFile(filePath, { target: project.getFirstTarget().uuid }, appGroupKey);
+      } else if (fileName.endsWith('.m')) {
+        project.addSourceFile(filePath, { target: project.getFirstTarget().uuid }, appGroupKey);
+      }
+    }
+
+    return mod;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main plugin – composes all sub-plugins
 // ---------------------------------------------------------------------------
 
@@ -328,6 +375,7 @@ function withNativeModules(config) {
   config = withIOSInfoPlist(config);
   config = withIOSEntitlements(config);
   config = withIOSSourceFiles(config);
+  config = withXcodeProjectFiles(config);
 
   // Android
   config = withAndroidPermissions(config);
