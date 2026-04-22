@@ -532,11 +532,23 @@ async function isDeployed(
   address: string,
   chainId: number,
 ): Promise<boolean> {
-  const response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
-  const result = response.result as string | undefined;
-  const deployed = !!result && result !== '0x' && result.length > 2;
-  console.log('[UserOp] isDeployed:', deployed, 'code length:', result?.length ?? 0);
-  return deployed;
+  try {
+    const response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
+    if (response.error) {
+      console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
+      // On error, assume deployed to avoid sending initCode for existing contracts
+      // This is safer than assuming undeployed (which generates initCode that fails)
+      return true;
+    }
+    const result = response.result as string | undefined;
+    const deployed = !!result && result !== '0x' && result.length > 2;
+    console.log('[UserOp] isDeployed:', deployed, 'code length:', result?.length ?? 0);
+    return deployed;
+  } catch (err) {
+    console.error('[UserOp] eth_getCode failed:', err instanceof Error ? err.message : String(err));
+    // Fail safe: assume deployed
+    return true;
+  }
 }
 
 async function getNonce(

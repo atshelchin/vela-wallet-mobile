@@ -388,7 +388,7 @@ export default function VelaConnectScreen() {
     const to = txDict.to ?? '';
     const valueHex = txDict.value ?? '0x0';
     const dataHex = txDict.data ?? '0x';
-    const chainId = currentChainId;
+    const chainId = chainIdRef.current; // use ref, not stale state
 
     // Get public key
     const credentialId = activeAccount?.id ?? '';
