@@ -221,16 +221,17 @@ private class PasskeyRequestHandler: NSObject,
 
     private var completion: ((Result<ASAuthorization, Error>) -> Void)?
 
-    @MainActor
     func performRequest(
         _ request: ASAuthorizationRequest,
         completion: @escaping (Result<ASAuthorization, Error>) -> Void
     ) {
         self.completion = completion
-        let controller = ASAuthorizationController(authorizationRequests: [request])
-        controller.delegate = self
-        controller.presentationContextProvider = self
-        controller.performRequests()
+        DispatchQueue.main.async {
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            controller.performRequests()
+        }
     }
 
     func authorizationController(
