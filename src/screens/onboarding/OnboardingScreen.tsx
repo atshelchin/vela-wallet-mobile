@@ -33,12 +33,16 @@ export default function OnboardingScreen() {
 
       // 1. Authenticate with existing passkey
       const assertion = await Passkey.authenticate();
+      console.log('[Login] credentialId:', assertion.credentialId);
+      console.log('[Login] userIdHex:', assertion.userIdHex ?? 'none');
 
       // 2. Try local AsyncStorage first
       const localAccounts = await loadAccounts();
+      console.log('[Login] Local accounts:', localAccounts.length, localAccounts.map(a => ({ id: a.id.slice(0, 12), name: a.name })));
       const local = localAccounts.find(a => a.id === assertion.credentialId);
 
       if (local) {
+        console.log('[Login] Found locally:', local.name, local.address);
         dispatch({
           type: 'SET_WALLET',
           accounts: localAccounts,
@@ -47,21 +51,27 @@ export default function OnboardingScreen() {
         router.replace('/(tabs)/wallet');
         return;
       }
+      console.log('[Login] Not found locally');
 
       // 3. Try CloudSync (iCloud / Google backup)
+      console.log('[Login] Trying CloudSync...');
       const cloudAccount = await tryCloudSync(assertion.credentialId);
       if (cloudAccount) {
+        console.log('[Login] Found in CloudSync:', cloudAccount.name, cloudAccount.address);
         await saveAccount(cloudAccount);
         dispatch({ type: 'ADD_ACCOUNT', account: cloudAccount });
         router.replace('/(tabs)/wallet');
         return;
       }
+      console.log('[Login] Not found in CloudSync');
 
       // 4. Try public key index server
+      console.log('[Login] Querying server: rpId=', Passkey.RELYING_PARTY, 'credentialId=', assertion.credentialId);
       const record = await PublicKeyIndex.queryRecord(
         Passkey.RELYING_PARTY,
         assertion.credentialId,
       );
+      console.log('[Login] Server returned:', record.name, 'publicKey:', record.publicKey.slice(0, 16) + '...');
 
       const address = computeAddress(record.publicKey);
       const userName = record.name || decodeUserNameFromAssertion(assertion.userIdHex);

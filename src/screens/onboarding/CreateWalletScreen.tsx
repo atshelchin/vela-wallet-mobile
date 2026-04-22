@@ -84,12 +84,16 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       // 8. Upload public key to index server (background, non-blocking)
       //    Triggers a second biometric prompt for the signing challenge.
       //    If it fails, it stays in pendingUploads for retry on next launch.
+      console.log('[CreateWallet] Starting background public key upload...');
       uploadPublicKey({
         credentialId: registration.credentialId,
         publicKeyHex,
         name: trimmed,
-      }).catch(() => {
-        // Upload failed — will retry on next app launch
+      }).then(() => {
+        console.log('[CreateWallet] Public key upload completed successfully');
+      }).catch((err) => {
+        console.error('[CreateWallet] Public key upload FAILED:', err instanceof Error ? err.message : String(err));
+        console.error('[CreateWallet] Will retry on next app launch');
       });
 
     } catch (error) {

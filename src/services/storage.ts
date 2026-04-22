@@ -29,16 +29,21 @@ async function loadArray<T>(key: string): Promise<T[]> {
   try {
     const cloudData = await CloudSync.get<T[]>(key);
     if (cloudData != null) {
-      // Sync cloud → local to keep local cache fresh
+      console.log(`[Storage] Cloud hit for "${key}":`, Array.isArray(cloudData) ? cloudData.length + ' items' : typeof cloudData);
       await AsyncStorage.setItem(key, JSON.stringify(cloudData));
       return cloudData;
     }
-  } catch {
-    // Cloud unavailable — fall through to local
+    console.log(`[Storage] Cloud miss for "${key}"`);
+  } catch (err) {
+    console.log(`[Storage] Cloud unavailable for "${key}":`, err instanceof Error ? err.message : String(err));
   }
 
   const raw = await AsyncStorage.getItem(key);
-  if (!raw) return [];
+  if (!raw) {
+    console.log(`[Storage] Local miss for "${key}"`);
+    return [];
+  }
+  console.log(`[Storage] Local hit for "${key}":`, raw.length, 'chars');
   try { return JSON.parse(raw); } catch { return []; }
 }
 
