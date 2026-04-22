@@ -126,7 +126,7 @@ export default function NFTGalleryScreen() {
 
   const navigateToDetail = (nft: APINFT) => {
     router.push({
-      pathname: '/wallet/nft-detail',
+      pathname: '/nft-detail',
       params: {
         network: nft.network,
         chainName: nft.chainName,

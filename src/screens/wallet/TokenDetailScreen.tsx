@@ -59,13 +59,13 @@ export default function TokenDetailScreen() {
 
   const handleSend = () => {
     router.push({
-      pathname: '/wallet/send',
+      pathname: '/send',
       params: { preselectedSymbol: symbol, preselectedNetwork: network },
     });
   };
 
   const handleReceive = () => {
-    router.push('/wallet/receive');
+    router.push('/receive');
   };
 
   return (

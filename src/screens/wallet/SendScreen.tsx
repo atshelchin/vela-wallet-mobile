@@ -11,6 +11,12 @@ import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { type APIToken, tokenBalanceDouble, tokenUsdValue, tokenLogoURL, formatBalance, tokenChainId, isNativeToken } from '@/models/types';
 import { chainName } from '@/models/network';
+import { sendNative, sendERC20 } from '@/services/safe-transaction';
+import { findAccountByCredentialId } from '@/services/storage';
+import * as Passkey from '@/modules/passkey';
+import { derSignatureToRaw } from '@/services/attestation-parser';
+import { keccak256 } from '@/services/eth-crypto';
+import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 
@@ -20,6 +26,25 @@ function isValidAddress(addr: string): boolean {
 
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Convert a decimal amount string + decimals to a hex wei string (no 0x prefix).
+ *  Uses string math to avoid floating-point precision loss. */
+function amountToWeiHex(amount: string, decimals: number): string {
+  const parts = amount.split('.');
+  const intPart = parts[0] || '0';
+  let fracPart = parts[1] || '';
+  // Pad or truncate fractional part to `decimals` digits
+  if (fracPart.length > decimals) {
+    fracPart = fracPart.slice(0, decimals);
+  } else {
+    fracPart = fracPart.padEnd(decimals, '0');
+  }
+  // Combine and remove leading zeros
+  const weiStr = (intPart + fracPart).replace(/^0+/, '') || '0';
+  // Convert decimal string to hex
+  let n = BigInt(weiStr);
+  return n.toString(16);
 }
 
 export default function SendScreen() {
@@ -89,16 +114,67 @@ export default function SendScreen() {
   };
 
   const handleConfirm = async () => {
+    if (!selectedToken || !activeAccount) return;
     setSending(true);
-    // Transaction service placeholder
-    setTimeout(() => {
-      setSending(false);
+    try {
+      const chainId = tokenChainId(selectedToken);
+
+      // Get public key for this account
+      const stored = await findAccountByCredentialId(activeAccount.id);
+      if (!stored?.publicKeyHex) {
+        throw new Error('Public key not found for this account');
+      }
+
+      // Build signFn that calls Passkey.sign
+      const signFn = async (challenge: Uint8Array) => {
+        const challengeHex = toHex(challenge);
+        const assertion = await Passkey.sign(challengeHex, activeAccount.id);
+        return {
+          signature: fromHex(assertion.signatureHex),
+          authenticatorData: fromHex(assertion.authenticatorDataHex),
+          clientDataJSON: fromHex(assertion.clientDataJSONHex),
+        };
+      };
+
+      // Convert amount to wei hex
+      const weiHex = amountToWeiHex(amount, selectedToken.decimals);
+
+      let result;
+      if (isNativeToken(selectedToken)) {
+        result = await sendNative(
+          activeAccount.address,
+          recipient,
+          weiHex,
+          chainId,
+          stored.publicKeyHex,
+          signFn,
+        );
+      } else {
+        result = await sendERC20(
+          activeAccount.address,
+          selectedToken.tokenAddress!,
+          recipient,
+          weiHex,
+          chainId,
+          stored.publicKeyHex,
+          signFn,
+        );
+      }
+
       Alert.alert(
-        'Transaction Submitted',
-        `Sending ${amount} ${selectedToken?.symbol} to ${recipient.slice(0, 8)}...${recipient.slice(-6)}`,
-        [{ text: 'OK', onPress: () => router.back() }]
+        'Transaction Confirmed',
+        `Transaction hash:\n${result.txHash.slice(0, 16)}...`,
+        [{ text: 'OK', onPress: () => router.back() }],
       );
-    }, 1500);
+    } catch (error: any) {
+      if (error?.code === 'PASSKEY_CANCELLED') {
+        // User cancelled biometric — do nothing
+      } else {
+        Alert.alert('Transaction Failed', error?.message ?? String(error));
+      }
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleBack = () => {
@@ -268,7 +344,7 @@ export default function SendScreen() {
           />
           {usdAmount > 0 && <ConfirmRow label="Value" value={formatUsd(usdAmount)} />}
           <ConfirmRow label="Network" value={chainName(tokenChainId(selectedToken))} />
-          <ConfirmRow label="Estimated Gas" value="~$0.01" />
+          <ConfirmRow label="Gas" value="Estimated by network" />
         </VelaCard>
 
         <VelaButton

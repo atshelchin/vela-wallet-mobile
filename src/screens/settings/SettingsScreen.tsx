@@ -218,7 +218,7 @@ function AccountSwitcherModal({
               title="Create New Account"
               onPress={() => {
                 onClose();
-                router.push('/onboarding/create');
+                router.push('/onboarding');
               }}
             />
             <VelaButton
@@ -226,7 +226,7 @@ function AccountSwitcherModal({
               variant="secondary"
               onPress={() => {
                 onClose();
-                router.push('/onboarding/create');
+                router.push('/onboarding');
               }}
             />
           </View>

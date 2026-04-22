@@ -17,6 +17,13 @@ import { useWallet, shortAddress } from '@/models/wallet-state';
 import { chainName, nativeSymbol, DEFAULT_NETWORKS } from '@/models/network';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import * as BLE from '@/modules/ble';
+import * as Passkey from '@/modules/passkey';
+import { sendNative, sendContractCall } from '@/services/safe-transaction';
+import { findAccountByCredentialId } from '@/services/storage';
+import { keccak256 } from '@/services/eth-crypto';
+import { derSignatureToRaw } from '@/services/attestation-parser';
+import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
+import * as PublicKeyIndex from '@/services/public-key-index';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -284,32 +291,137 @@ export default function VelaConnectScreen() {
     setIncomingRequest(null);
   }, []);
 
+  // --- personal_sign ---
+  async function handlePersonalSign(request: BLEIncomingRequest): Promise<string> {
+    const credentialId = activeAccount?.id;
+    const hexMsg = request.params[0] as string;
+    const clean = stripHexPrefix(hexMsg);
+    const msgBytes = fromHex(clean);
+
+    // Ethereum personal sign prefix
+    const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
+    const combined = new Uint8Array(prefix.length + msgBytes.length);
+    combined.set(prefix);
+    combined.set(msgBytes, prefix.length);
+    const dataToSign = keccak256(combined);
+
+    const assertion = await Passkey.sign(toHex(dataToSign), credentialId);
+    const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
+    if (!rawSig) throw new Error('Failed to convert signature');
+
+    return '0x' + toHex(rawSig) + '00';
+  }
+
+  // --- eth_signTypedData_v4 ---
+  async function handleSignTypedData(request: BLEIncomingRequest): Promise<string> {
+    const credentialId = activeAccount?.id;
+    // Hash the typed data params
+    const jsonStr = JSON.stringify(request.params);
+    const jsonBytes = new TextEncoder().encode(jsonStr);
+    const dataToSign = keccak256(jsonBytes);
+
+    const assertion = await Passkey.sign(toHex(dataToSign), credentialId);
+    const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
+    if (!rawSig) throw new Error('Failed to convert signature');
+
+    return '0x' + toHex(rawSig) + '00';
+  }
+
+  // --- eth_sendTransaction (full ERC-4337 UserOp) ---
+  async function handleSendTransaction(request: BLEIncomingRequest): Promise<string> {
+    const txDict = request.params[0] as Record<string, string>;
+    const to = txDict.to ?? '';
+    const valueHex = txDict.value ?? '0x0';
+    const dataHex = txDict.data ?? '0x';
+    const chainId = currentChainId;
+
+    // Get public key
+    const credentialId = activeAccount?.id ?? '';
+    let publicKeyHex: string | undefined;
+
+    const stored = await findAccountByCredentialId(credentialId);
+    publicKeyHex = stored?.publicKeyHex;
+
+    if (!publicKeyHex) {
+      // Try server recovery
+      const record = await PublicKeyIndex.queryRecord(Passkey.RELYING_PARTY, credentialId);
+      publicKeyHex = record.publicKey;
+    }
+
+    if (!publicKeyHex) throw new Error('Public key not found');
+
+    // Build signFn
+    const signFn = async (challenge: Uint8Array) => {
+      const assertion = await Passkey.sign(toHex(challenge), credentialId);
+      return {
+        signature: fromHex(assertion.signatureHex),
+        authenticatorData: fromHex(assertion.authenticatorDataHex),
+        clientDataJSON: fromHex(assertion.clientDataJSONHex),
+      };
+    };
+
+    const valueClean = stripHexPrefix(valueHex) || '0';
+
+    let txResult;
+    if (dataHex === '0x' || dataHex === '') {
+      txResult = await sendNative(state.address, to, valueClean, chainId, publicKeyHex, signFn);
+    } else {
+      const txData = fromHex(stripHexPrefix(dataHex));
+      txResult = await sendContractCall(state.address, to, valueClean, txData, chainId, publicKeyHex, signFn);
+    }
+
+    return txResult.txHash;
+  }
+
+  // --- generic sign ---
+  async function handleGenericSign(request: BLEIncomingRequest): Promise<string> {
+    const credentialId = activeAccount?.id;
+    const jsonStr = JSON.stringify(request.params);
+    const jsonBytes = new TextEncoder().encode(jsonStr);
+    const dataToSign = keccak256(jsonBytes);
+
+    const assertion = await Passkey.sign(toHex(dataToSign), credentialId);
+    return '0x' + assertion.signatureHex;
+  }
+
   const approveRequest = useCallback(
     async (request: BLEIncomingRequest) => {
       setIsSigning(true);
       setSignError(null);
       try {
-        // Placeholder: signing logic will be wired up with passkey service
-        // For now, send a placeholder response
-        await BLE.sendResponse(request.id, '0x_placeholder_signature');
+        let resultValue: any;
+
+        if (request.method === 'eth_sendTransaction') {
+          resultValue = await handleSendTransaction(request);
+        } else if (request.method === 'personal_sign') {
+          resultValue = await handlePersonalSign(request);
+        } else if (request.method.includes('signTypedData')) {
+          resultValue = await handleSignTypedData(request);
+        } else {
+          resultValue = await handleGenericSign(request);
+        }
+
+        await BLE.sendResponse(request.id, resultValue);
         setIncomingRequest(null);
       } catch (err: any) {
+        if (err?.code === 'PASSKEY_CANCELLED') {
+          // User cancelled biometric — don't send error to dApp, just reset
+          setIsSigning(false);
+          return;
+        }
         setSignError(err.message ?? 'Signing failed');
-        // Send error back so dApp promise resolves
         try {
           await BLE.sendResponse(request.id, undefined, {
             code: -32603,
             message: err.message ?? 'Internal error',
           });
-        } catch {
-          // Ignore send-response errors
-        }
+        } catch {}
         setIncomingRequest(null);
       } finally {
         setIsSigning(false);
       }
     },
-    [],
+    [state, activeAccount],
   );
 
   const rejectRequest = useCallback(async (request: BLEIncomingRequest) => {

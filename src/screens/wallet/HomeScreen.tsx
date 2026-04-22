@@ -8,6 +8,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { VelaColor, VelaFont, VelaSpacing } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
+import { loadCustomTokens } from '@/services/storage';
 import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBalance, shortAddr, type APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
 
@@ -56,6 +57,24 @@ export default function HomeScreen() {
       const result = await fetchTokens(address);
       // Sort by USD value descending
       result.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+      // Load custom tokens and merge
+      const custom = await loadCustomTokens();
+      for (const ct of custom) {
+        if (!result.find(t => t.tokenAddress?.toLowerCase() === ct.contractAddress.toLowerCase() && tokenChainId(t) === ct.chainId)) {
+          result.push({
+            network: ct.id.split('_')[0] || 'eth-mainnet',
+            chainName: ct.networkName,
+            symbol: ct.symbol,
+            balance: '0',
+            decimals: ct.decimals,
+            logo: null,
+            name: ct.name,
+            tokenAddress: ct.contractAddress,
+            priceUsd: null,
+            spam: false,
+          });
+        }
+      }
       setTokens(result);
     } catch (err) {
       if (!silent) {
@@ -92,7 +111,7 @@ export default function HomeScreen() {
 
   const navigateToToken = (token: APIToken) => {
     router.push({
-      pathname: '/wallet/token-detail',
+      pathname: '/token-detail',
       params: {
         symbol: token.symbol,
         name: token.name,
@@ -120,9 +139,9 @@ export default function HomeScreen() {
 
       {/* Action buttons */}
       <View style={styles.actionRow}>
-        <ActionButton label="Send" icon="↑" onPress={() => router.push('/wallet/send')} />
-        <ActionButton label="Receive" icon="↓" onPress={() => router.push('/wallet/receive')} />
-        <ActionButton label="History" icon="≡" onPress={() => Alert.alert('Coming Soon', 'Transaction history is not yet available.')} />
+        <ActionButton label="Send" icon="↑" onPress={() => router.push('/send')} />
+        <ActionButton label="Receive" icon="↓" onPress={() => router.push('/receive')} />
+        <ActionButton label="History" icon="≡" onPress={() => router.push('/history')} />
       </View>
     </View>
   );

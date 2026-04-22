@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -9,12 +9,44 @@ import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme'
 import { useWallet } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
+import { fetchTokens } from '@/services/wallet-api';
+import { tokenUsdValue } from '@/models/types';
+import * as Haptics from 'expo-haptics';
 
 export default function ReceiveScreen() {
   const router = useRouter();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
+
+  const [isListening, setIsListening] = useState(false);
+  const [depositDetected, setDepositDetected] = useState(false);
+  const previousBalance = useRef<number | null>(null);
+
+  // Deposit detection polling
+  useEffect(() => {
+    if (!address) return;
+    setIsListening(true);
+
+    const checkDeposit = async () => {
+      try {
+        const tokens = await fetchTokens(address);
+        const total = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
+
+        if (previousBalance.current !== null && total > previousBalance.current) {
+          setDepositDetected(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Reset after 5 seconds
+          setTimeout(() => setDepositDetected(false), 5000);
+        }
+        previousBalance.current = total;
+      } catch {}
+    };
+
+    checkDeposit();
+    const timer = setInterval(checkDeposit, 10000);
+    return () => { clearInterval(timer); setIsListening(false); };
+  }, [address]);
 
   const copyAddress = async () => {
     if (!address) return;
@@ -85,6 +117,21 @@ export default function ReceiveScreen() {
           />
         </View>
 
+        {/* Listening indicator */}
+        {isListening && !depositDetected && (
+          <View style={styles.listeningRow}>
+            <View style={styles.listeningDot} />
+            <Text style={styles.listeningText}>Listening for deposits...</Text>
+          </View>
+        )}
+
+        {/* Deposit detected */}
+        {depositDetected && (
+          <View style={styles.depositAlert}>
+            <Text style={styles.depositText}>Deposit received!</Text>
+          </View>
+        )}
+
         {/* Supported networks */}
         <Text style={styles.sectionTitle}>Supported Networks</Text>
         <Text style={styles.sectionSubtitle}>
@@ -109,6 +156,10 @@ export default function ReceiveScreen() {
             </View>
           ))}
         </VelaCard>
+
+        <Text style={styles.warning}>
+          All supported networks share the same wallet address. Make sure the sender uses the correct network.
+        </Text>
       </ScrollView>
     </ScreenContainer>
   );
@@ -245,4 +296,10 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: VelaColor.border,
   },
+  listeningRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginVertical: 12 },
+  listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: VelaColor.green },
+  listeningText: { ...VelaFont.body(14), color: VelaColor.green },
+  depositAlert: { backgroundColor: VelaColor.greenSoft, padding: 16, borderRadius: VelaRadius.cardSmall, marginVertical: 12, alignItems: 'center' },
+  depositText: { ...VelaFont.title(16), color: VelaColor.green },
+  warning: { ...VelaFont.body(13), color: VelaColor.textTertiary, textAlign: 'center', marginTop: 16, lineHeight: 18 },
 });

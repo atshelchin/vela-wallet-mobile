@@ -141,7 +141,9 @@ export async function getNetworkConfig(chainId: number): Promise<NetworkConfig |
 
 export async function clearAll(): Promise<void> {
   // Clear local
-  await AsyncStorage.multiRemove(Object.values(KEYS));
+  for (const key of Object.values(KEYS)) {
+    await AsyncStorage.removeItem(key);
+  }
   // Clear cloud (best-effort)
   for (const key of Object.values(KEYS)) {
     CloudSync.remove(key).catch(() => {});

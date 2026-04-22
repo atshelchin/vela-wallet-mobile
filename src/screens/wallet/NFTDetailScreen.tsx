@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Alert, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Alert, Dimensions, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -35,6 +35,10 @@ export default function NFTDetailScreen() {
   const chainDisplayName = params.chainName ?? '';
   const network = params.network ?? '';
 
+  const [showSendForm, setShowSendForm] = useState(false);
+  const [sendTo, setSendTo] = useState('');
+  const [isSendingNFT, setIsSendingNFT] = useState(false);
+
   // Resolve IPFS URLs
   let imageUrl = params.image || null;
   if (imageUrl && imageUrl.startsWith('ipfs://')) {
@@ -47,7 +51,24 @@ export default function NFTDetailScreen() {
   };
 
   const handleSendNFT = () => {
-    Alert.alert('Coming Soon', 'NFT transfers are not yet available.');
+    setShowSendForm(true);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!sendTo || !sendTo.startsWith('0x') || sendTo.length !== 42) {
+      Alert.alert('Invalid Address', 'Please enter a valid Ethereum address.');
+      return;
+    }
+    setIsSendingNFT(true);
+    try {
+      // TODO: Build safeTransferFrom(from, to, tokenId) calldata
+      // and call sendContractCall with the NFT contract address
+      Alert.alert('Coming Soon', 'NFT transfer execution is being implemented.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to send NFT.');
+    } finally {
+      setIsSendingNFT(false);
+    }
   };
 
   return (
@@ -109,6 +130,40 @@ export default function NFTDetailScreen() {
           variant="secondary"
           style={styles.sendBtn}
         />
+
+        {/* Send form */}
+        {showSendForm && (
+          <VelaCard style={styles.sendFormCard}>
+            <Text style={styles.sendFormTitle}>Send NFT</Text>
+            <Text style={styles.sendFormLabel}>Recipient Address</Text>
+            <TextInput
+              style={styles.sendFormInput}
+              value={sendTo}
+              onChangeText={setSendTo}
+              placeholder="0x..."
+              placeholderTextColor={VelaColor.textTertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.sendFormButtons}>
+              <VelaButton
+                title="Cancel"
+                variant="secondary"
+                onPress={() => { setShowSendForm(false); setSendTo(''); }}
+                style={styles.sendFormBtn}
+              />
+              {isSendingNFT ? (
+                <ActivityIndicator color={VelaColor.accent} style={styles.sendFormBtn} />
+              ) : (
+                <VelaButton
+                  title="Confirm Send"
+                  onPress={handleConfirmSend}
+                  style={styles.sendFormBtn}
+                />
+              )}
+            </View>
+          </VelaCard>
+        )}
       </ScrollView>
     </ScreenContainer>
   );
@@ -232,5 +287,36 @@ const styles = StyleSheet.create({
   },
   sendBtn: {
     marginTop: 4,
+  },
+  sendFormCard: {
+    padding: VelaSpacing.cardPadding,
+    marginTop: 16,
+  },
+  sendFormTitle: {
+    ...VelaFont.title(17),
+    color: VelaColor.textPrimary,
+    marginBottom: 12,
+  },
+  sendFormLabel: {
+    ...VelaFont.label(13),
+    color: VelaColor.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  sendFormInput: {
+    ...VelaFont.mono(13),
+    color: VelaColor.textPrimary,
+    padding: 14,
+    backgroundColor: VelaColor.bgWarm,
+    borderRadius: VelaRadius.cardSmall,
+    marginBottom: 14,
+  },
+  sendFormButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  sendFormBtn: {
+    flex: 1,
   },
 });
