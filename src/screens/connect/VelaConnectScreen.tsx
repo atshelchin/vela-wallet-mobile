@@ -219,7 +219,24 @@ export default function VelaConnectScreen() {
           const addr = addressRef.current;
           const cid = chainIdRef.current;
 
-          // Auto-reply to read-only / query methods — no user approval needed
+          console.log('[BLE] ←', method, id.slice(0, 8));
+
+          // --- Signing methods: need user approval ---
+          if (method === 'eth_sendTransaction' ||
+              method === 'personal_sign' ||
+              method === 'eth_sign' ||
+              method.includes('signTypedData')) {
+            setIncomingRequest({
+              id: data.id,
+              method: data.method,
+              params: data.params,
+              origin: data.origin,
+              favicon: data.favicon,
+            });
+            return;
+          }
+
+          // --- Everything else: auto-reply immediately ---
           switch (method) {
             case 'eth_accounts':
             case 'eth_requestAccounts':
@@ -247,35 +264,18 @@ export default function VelaConnectScreen() {
             case 'wallet_addEthereumChain':
               BLE.sendResponse(id, null).catch(() => {});
               return;
-            case 'eth_estimateGas':
-            case 'eth_gasPrice':
-            case 'eth_getBalance':
-            case 'eth_getCode':
-            case 'eth_call':
-            case 'eth_blockNumber':
-            case 'eth_getBlockByNumber':
-            case 'eth_getTransactionByHash':
-            case 'eth_getTransactionReceipt':
-              rpcCall(method, params, cid)
-                .then((res) => BLE.sendResponse(id, res.result))
-                .catch((err) => BLE.sendResponse(id, undefined, { code: -32603, message: err?.message ?? 'RPC error' }));
+            default:
+              // Forward any other RPC method to the proxy
+              // This covers eth_call, eth_getBalance, eth_blockNumber,
+              // multicall, eth_getLogs, and any UniSwap-specific queries
+              rpcCall(method, params ?? [], cid)
+                .then((res) => {
+                  BLE.sendResponse(id, res.result ?? res.error ?? null).catch(() => {});
+                })
+                .catch(() => {
+                  BLE.sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` }).catch(() => {});
+                });
               return;
-          }
-
-          // Only signing methods need user approval
-          const SIGNING_METHODS = ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTypedData_v4', 'eth_sign'];
-          if (SIGNING_METHODS.some(m => method === m || method.includes('signTypedData'))) {
-            setIncomingRequest({
-              id: data.id,
-              method: data.method,
-              params: data.params,
-              origin: data.origin,
-              favicon: data.favicon,
-            });
-          } else {
-            // Unknown method — return error so dApp's promise resolves instead of hanging
-            console.log('[BLE] Unknown method, returning error:', method);
-            BLE.sendResponse(id, undefined, { code: -32601, message: `Method not supported: ${method}` }).catch(() => {});
           }
         }),
       );

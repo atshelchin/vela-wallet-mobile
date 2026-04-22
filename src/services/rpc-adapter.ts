@@ -47,20 +47,27 @@ export async function rpcCall(
     } catch { /* fall through */ }
   }
 
-  // 2. getvela.app proxy (always works — has API keys server-side)
+  // 2. getvela.app proxy (for whitelisted methods — has API keys server-side)
   //    Body format: { method, params, network } — matches iOS RPCAdapter.proxyRPC
-  try {
-    const result = await proxyRPC(method, params, chainId);
-    if (result) return result;
-  } catch { /* fall through */ }
-
-  // 3. Public RPC fallback (non-bundler only)
   if (!isBundler) {
-    const network = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
-    if (network) {
-      const result = await directRPC(network.rpcURL, method, params);
+    // For standard RPC, try proxy first but fall back to public RPC quickly
+    try {
+      const result = await proxyRPC(method, params, chainId);
+      if (result && !result.error) return result;
+    } catch { /* fall through to public RPC */ }
+
+    // 3. Public RPC fallback — handles any method the proxy doesn't whitelist
+    const publicUrl = getPublicRPC(chainId);
+    if (publicUrl) {
+      const result = await directRPC(publicUrl, method, params);
       if (result) return result;
     }
+  } else {
+    // Bundler methods only go through proxy
+    try {
+      const result = await proxyRPC(method, params, chainId);
+      if (result) return result;
+    } catch { /* fall through */ }
   }
 
   throw new Error('All RPC endpoints failed');
@@ -105,6 +112,21 @@ async function proxyRPC(
 
   if (!response.ok) return null;
   return response.json();
+}
+
+/** Get a working public RPC URL for a chain. */
+function getPublicRPC(chainId: number): string | null {
+  // Use reliable free RPCs (the defaults in DEFAULT_NETWORKS may be stale)
+  const rpcs: Record<number, string> = {
+    1: 'https://1rpc.io/eth',
+    137: 'https://1rpc.io/matic',
+    42161: 'https://1rpc.io/arb',
+    10: 'https://1rpc.io/op',
+    8453: 'https://1rpc.io/base',
+    56: 'https://1rpc.io/bnb',
+    43114: 'https://1rpc.io/avax/c',
+  };
+  return rpcs[chainId] ?? null;
 }
 
 /** Get user-configured endpoint if they've customized it (not the default). */
