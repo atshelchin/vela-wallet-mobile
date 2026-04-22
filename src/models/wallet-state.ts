@@ -2,8 +2,9 @@
  * Wallet state management using React Context.
  * Matches iOS WalletState.swift.
  */
-import React, { createContext, useContext, useReducer, useCallback, type Dispatch } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState, type Dispatch } from 'react';
 import type { Account } from './types';
+import { loadAccounts } from '@/services/storage';
 
 // MARK: - State Shape
 
@@ -13,6 +14,8 @@ export interface WalletState {
   isConnectedToBrowser: boolean;
   accounts: Account[];
   activeAccountIndex: number;
+  /** True until storage has been read on startup. */
+  isLoading: boolean;
 }
 
 const INITIAL_STATE: WalletState = {
@@ -21,6 +24,7 @@ const INITIAL_STATE: WalletState = {
   isConnectedToBrowser: false,
   accounts: [],
   activeAccountIndex: 0,
+  isLoading: true,
 };
 
 // MARK: - Actions
@@ -30,6 +34,7 @@ type WalletAction =
   | { type: 'ADD_ACCOUNT'; account: Account }
   | { type: 'SWITCH_ACCOUNT'; index: number }
   | { type: 'SET_CONNECTED'; connected: boolean }
+  | { type: 'LOADED_EMPTY' }
   | { type: 'LOGOUT' };
 
 function walletReducer(state: WalletState, action: WalletAction): WalletState {
@@ -43,6 +48,7 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
         accounts: action.accounts,
         activeAccountIndex: idx,
         address: account?.address ?? '',
+        isLoading: false,
       };
     }
     case 'ADD_ACCOUNT': {
@@ -54,6 +60,7 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
         accounts,
         activeAccountIndex: idx,
         address: action.account.address,
+        isLoading: false,
       };
     }
     case 'SWITCH_ACCOUNT': {
@@ -67,8 +74,10 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
     }
     case 'SET_CONNECTED':
       return { ...state, isConnectedToBrowser: action.connected };
+    case 'LOADED_EMPTY':
+      return { ...state, isLoading: false };
     case 'LOGOUT':
-      return INITIAL_STATE;
+      return { ...INITIAL_STATE, isLoading: false };
     default:
       return state;
   }
@@ -97,6 +106,21 @@ export function useWallet(): WalletContextValue {
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(walletReducer, INITIAL_STATE);
   const activeAccount = state.accounts[state.activeAccountIndex];
+
+  // Restore wallet state from storage on mount
+  useEffect(() => {
+    loadAccounts()
+      .then((accounts) => {
+        if (accounts.length > 0) {
+          dispatch({ type: 'SET_WALLET', accounts });
+        } else {
+          dispatch({ type: 'LOADED_EMPTY' });
+        }
+      })
+      .catch(() => {
+        dispatch({ type: 'LOADED_EMPTY' });
+      });
+  }, []);
 
   const value = React.useMemo(
     () => ({ state, dispatch, activeAccount }),
