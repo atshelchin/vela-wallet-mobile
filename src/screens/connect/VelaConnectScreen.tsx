@@ -24,6 +24,7 @@ import { keccak256 } from '@/services/eth-crypto';
 import { derSignatureToRaw } from '@/services/attestation-parser';
 import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
+import { rpcCall } from '@/services/rpc-adapter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,6 +173,71 @@ export default function VelaConnectScreen() {
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [currentChainId, setCurrentChainId] = useState(1);
 
+  /**
+   * Handle read-only RPC methods that don't need user approval.
+   * Returns true if the method was handled, false if it needs user approval.
+   */
+  function handleAutoReply(id: string, method: string, params: any[]): boolean {
+    const addr = activeAccount?.address ?? state.address;
+    const chainIdHex = '0x' + currentChainId.toString(16);
+
+    switch (method) {
+      case 'eth_accounts':
+      case 'eth_requestAccounts':
+        BLE.sendResponse(id, [addr]).catch(() => {});
+        return true;
+
+      case 'eth_chainId':
+        BLE.sendResponse(id, chainIdHex).catch(() => {});
+        return true;
+
+      case 'net_version':
+        BLE.sendResponse(id, String(currentChainId)).catch(() => {});
+        return true;
+
+      case 'wallet_getPermissions':
+        BLE.sendResponse(id, [{ parentCapability: 'eth_accounts' }]).catch(() => {});
+        return true;
+
+      case 'wallet_requestPermissions':
+        BLE.sendResponse(id, [{ parentCapability: 'eth_accounts' }]).catch(() => {});
+        return true;
+
+      case 'wallet_switchEthereumChain': {
+        const chainParam = params?.[0] as { chainId?: string } | undefined;
+        if (chainParam?.chainId) {
+          const newChainId = parseInt(chainParam.chainId, 16);
+          if (!isNaN(newChainId)) setCurrentChainId(newChainId);
+        }
+        BLE.sendResponse(id, null).catch(() => {});
+        return true;
+      }
+
+      case 'wallet_addEthereumChain':
+        // Accept but don't actually add — just acknowledge
+        BLE.sendResponse(id, null).catch(() => {});
+        return true;
+
+      case 'eth_estimateGas':
+      case 'eth_gasPrice':
+      case 'eth_getBalance':
+      case 'eth_getCode':
+      case 'eth_call':
+      case 'eth_blockNumber':
+      case 'eth_getBlockByNumber':
+      case 'eth_getTransactionByHash':
+      case 'eth_getTransactionReceipt':
+        // Forward RPC queries through our proxy, return result
+        rpcCall(method, params, currentChainId)
+          .then((res) => BLE.sendResponse(id, res.result))
+          .catch((err) => BLE.sendResponse(id, undefined, { code: -32603, message: err.message }));
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
   const unsubscribersRef = useRef<(() => void)[]>([]);
 
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -208,6 +274,11 @@ export default function VelaConnectScreen() {
 
       unsubs.push(
         BLE.addListener('requestReceived', (data) => {
+          // Auto-reply to read-only / query methods — no user approval needed
+          const autoReply = handleAutoReply(data.id, data.method, data.params);
+          if (autoReply) return;
+
+          // Signing / transaction methods need user approval
           setIncomingRequest({
             id: data.id,
             method: data.method,
