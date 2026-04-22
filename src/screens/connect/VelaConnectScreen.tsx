@@ -262,14 +262,21 @@ export default function VelaConnectScreen() {
               return;
           }
 
-          // Signing / transaction methods need user approval
-          setIncomingRequest({
-            id: data.id,
-            method: data.method,
-            params: data.params,
-            origin: data.origin,
-            favicon: data.favicon,
-          });
+          // Only signing methods need user approval
+          const SIGNING_METHODS = ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTypedData_v4', 'eth_sign'];
+          if (SIGNING_METHODS.some(m => method === m || method.includes('signTypedData'))) {
+            setIncomingRequest({
+              id: data.id,
+              method: data.method,
+              params: data.params,
+              origin: data.origin,
+              favicon: data.favicon,
+            });
+          } else {
+            // Unknown method — return error so dApp's promise resolves instead of hanging
+            console.log('[BLE] Unknown method, returning error:', method);
+            BLE.sendResponse(id, undefined, { code: -32601, message: `Method not supported: ${method}` }).catch(() => {});
+          }
         }),
       );
 
