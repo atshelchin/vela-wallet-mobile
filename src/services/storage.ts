@@ -25,26 +25,66 @@ const KEYS = {
 // ---------------------------------------------------------------------------
 
 async function loadArray<T>(key: string): Promise<T[]> {
-  // Try cloud first, fall back to local
+  // Load from both sources and merge — never let cloud overwrite newer local data
+  let localItems: T[] = [];
+  let cloudItems: T[] = [];
+
+  // Local (always available)
   try {
-    const cloudData = await CloudSync.get<T[]>(key);
-    if (cloudData != null) {
-      console.log(`[Storage] Cloud hit for "${key}":`, Array.isArray(cloudData) ? cloudData.length + ' items' : typeof cloudData);
-      await AsyncStorage.setItem(key, JSON.stringify(cloudData));
-      return cloudData;
+    const raw = await AsyncStorage.getItem(key);
+    if (raw) {
+      localItems = JSON.parse(raw);
+      console.log(`[Storage] Local hit for "${key}":`, localItems.length, 'items');
+    } else {
+      console.log(`[Storage] Local miss for "${key}"`);
     }
-    console.log(`[Storage] Cloud miss for "${key}"`);
+  } catch {
+    console.log(`[Storage] Local parse error for "${key}"`);
+  }
+
+  // Cloud (may be stale or unavailable)
+  try {
+    const data = await CloudSync.get<T[]>(key);
+    if (data != null && Array.isArray(data)) {
+      cloudItems = data;
+      console.log(`[Storage] Cloud hit for "${key}":`, cloudItems.length, 'items');
+    } else {
+      console.log(`[Storage] Cloud miss for "${key}"`);
+    }
   } catch (err) {
     console.log(`[Storage] Cloud unavailable for "${key}":`, err instanceof Error ? err.message : String(err));
   }
 
-  const raw = await AsyncStorage.getItem(key);
-  if (!raw) {
-    console.log(`[Storage] Local miss for "${key}"`);
-    return [];
+  // Merge: local wins for duplicates, cloud adds items not in local
+  if (cloudItems.length === 0) return localItems;
+  if (localItems.length === 0) return cloudItems;
+
+  // If items have no id field, can't merge by id — prefer the longer array
+  const first = localItems[0] as any;
+  const hasIds = first && typeof first === 'object' && 'id' in first && first.id;
+  if (!hasIds) {
+    return localItems.length >= cloudItems.length ? localItems : cloudItems;
   }
-  console.log(`[Storage] Local hit for "${key}":`, raw.length, 'chars');
-  try { return JSON.parse(raw); } catch { return []; }
+
+  const localIds = new Set(localItems.map(item => (item as any).id as string));
+  const merged = [...localItems];
+  for (const cloudItem of cloudItems) {
+    const cid = (cloudItem as any).id as string;
+    if (cid && !localIds.has(cid)) {
+      merged.push(cloudItem);
+      console.log(`[Storage] Merged cloud-only item into "${key}":`, cid.slice(0, 12));
+    }
+  }
+
+  // Persist merged result to both stores
+  if (merged.length > localItems.length) {
+    const json = JSON.stringify(merged);
+    await AsyncStorage.setItem(key, json);
+    CloudSync.save(key, merged).catch(() => {});
+    console.log(`[Storage] Persisted merged "${key}":`, merged.length, 'items');
+  }
+
+  return merged;
 }
 
 async function saveArray<T>(key: string, items: T[]): Promise<void> {
