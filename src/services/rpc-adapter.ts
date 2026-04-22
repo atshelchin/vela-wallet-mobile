@@ -76,14 +76,16 @@ export async function rpcCall(
 async function getEndpoints(chainId: number, isBundler: boolean): Promise<string[]> {
   const endpoints: string[] = [];
 
-  // 1. User-configured
+  // 1. User-configured (only if it looks like it has auth / is not bare Pimlico)
   const config = await getNetworkConfig(chainId);
   if (config) {
     const url = isBundler ? config.bundlerURL : config.rpcURL;
-    if (url) endpoints.push(url);
+    if (url && !isBarePublicBundler(url)) {
+      endpoints.push(url);
+    }
   }
 
-  // 2. Proxy
+  // 2. Proxy (always works — has API key server-side)
   const proxyUrl = isBundler ? BUNDLER_PROXY_URL : PROXY_URL;
   const proxyWithChain = `${proxyUrl}?chainId=${chainId}`;
   endpoints.push(proxyWithChain);
@@ -95,4 +97,12 @@ async function getEndpoints(chainId: number, isBundler: boolean): Promise<string
   }
 
   return endpoints;
+}
+
+/** Detect bundler URLs that will 401 without an API key. */
+function isBarePublicBundler(url: string): boolean {
+  // Pimlico requires ?apikey= parameter; bare URLs like
+  // "https://api.pimlico.io/v2/1/rpc" will return 401.
+  if (url.includes('pimlico.io') && !url.includes('apikey')) return true;
+  return false;
 }
