@@ -12,6 +12,7 @@ interface Props {
 export function QRScanner({ visible, onScan, onClose }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [facing, setFacing] = useState<'back' | 'front'>('back');
 
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
@@ -39,7 +40,9 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             <Text style={styles.closeButton}>Close</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Scan QR Code</Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} activeOpacity={0.7}>
+            <Text style={styles.flipButton}>{facing === 'back' ? 'Front' : 'Back'}</Text>
+          </TouchableOpacity>
         </View>
 
         {!permission?.granted ? (
@@ -59,7 +62,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           <View style={styles.cameraContainer}>
             <CameraView
               style={styles.camera}
-              facing="back"
+              facing={facing}
               barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
               onBarcodeScanned={handleBarCodeScanned}
             />
@@ -108,8 +111,11 @@ const styles = StyleSheet.create({
     ...VelaFont.title(17),
     color: '#FFFFFF',
   },
-  placeholder: {
+  flipButton: {
+    ...VelaFont.title(16),
+    color: VelaColor.accent,
     width: 60,
+    textAlign: 'right',
   },
   permissionContainer: {
     flex: 1,
