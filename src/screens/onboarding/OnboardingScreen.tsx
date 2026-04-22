@@ -5,11 +5,13 @@ import { WelcomeScreen } from './WelcomeScreen';
 import { CreateWalletScreen } from './CreateWalletScreen';
 import { useWallet } from '@/models/wallet-state';
 import { loadAccounts, saveAccount } from '@/services/storage';
-import { fromHex, toHex } from '@/services/hex';
+import { fromHex } from '@/services/hex';
 import { computeAddress } from '@/services/safe-address';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
 import * as PublicKeyIndex from '@/services/public-key-index';
+import * as CloudSync from '@/modules/cloud-sync';
+import type { StoredAccount } from '@/models/types';
 
 type Step = 'welcome' | 'create';
 
@@ -32,12 +34,11 @@ export default function OnboardingScreen() {
       // 1. Authenticate with existing passkey
       const assertion = await Passkey.authenticate();
 
-      // 2. Try to find account locally first
+      // 2. Try local AsyncStorage first
       const localAccounts = await loadAccounts();
       const local = localAccounts.find(a => a.id === assertion.credentialId);
 
       if (local) {
-        // Found locally — restore wallet
         dispatch({
           type: 'SET_WALLET',
           accounts: localAccounts,
@@ -47,22 +48,25 @@ export default function OnboardingScreen() {
         return;
       }
 
-      // 3. Not found locally — query public key index server
+      // 3. Try CloudSync (iCloud / Google backup)
+      const cloudAccount = await tryCloudSync(assertion.credentialId);
+      if (cloudAccount) {
+        await saveAccount(cloudAccount);
+        dispatch({ type: 'ADD_ACCOUNT', account: cloudAccount });
+        router.replace('/(tabs)/wallet');
+        return;
+      }
+
+      // 4. Try public key index server
       const record = await PublicKeyIndex.queryRecord(
         Passkey.RELYING_PARTY,
         assertion.credentialId,
       );
 
-      // 4. Compute address from recovered public key
       const address = computeAddress(record.publicKey);
-      const userName = record.name || Passkey.decodeUserName(
-        assertion.userIdHex
-          ? String.fromCharCode(...fromHex(assertion.userIdHex))
-          : '',
-      );
+      const userName = record.name || decodeUserNameFromAssertion(assertion.userIdHex);
 
-      // 5. Save and restore
-      const account = {
+      const account: StoredAccount = {
         id: assertion.credentialId,
         name: userName,
         address,
@@ -99,4 +103,27 @@ export default function OnboardingScreen() {
       onLogin={handleLogin}
     />
   );
+}
+
+/** Try to find the account in cloud-synced storage (iCloud / Google backup). */
+async function tryCloudSync(credentialId: string): Promise<StoredAccount | null> {
+  try {
+    const cloudAccounts = await CloudSync.get<StoredAccount[]>('vela.accounts');
+    if (!cloudAccounts || !Array.isArray(cloudAccounts)) return null;
+    return cloudAccounts.find(a => a.id === credentialId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Decode username from the assertion's userIdHex field. */
+function decodeUserNameFromAssertion(userIdHex?: string): string {
+  if (!userIdHex) return 'Wallet';
+  try {
+    const bytes = fromHex(userIdHex);
+    const str = String.fromCharCode(...bytes);
+    return Passkey.decodeUserName(str) || 'Wallet';
+  } catch {
+    return 'Wallet';
+  }
 }
