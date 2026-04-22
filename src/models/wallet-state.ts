@@ -4,7 +4,8 @@
  */
 import React, { createContext, useContext, useReducer, useEffect, useState, type Dispatch } from 'react';
 import type { Account } from './types';
-import { loadAccounts } from '@/services/storage';
+import { loadAccounts, saveAccount } from '@/services/storage';
+import { computeAddress } from '@/services/safe-address';
 
 // MARK: - State Shape
 
@@ -107,11 +108,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(walletReducer, INITIAL_STATE);
   const activeAccount = state.accounts[state.activeAccountIndex];
 
-  // Restore wallet state from storage on mount
+  // Restore wallet state from storage on mount, fixing any bad addresses
   useEffect(() => {
     loadAccounts()
-      .then((accounts) => {
+      .then(async (accounts) => {
         if (accounts.length > 0) {
+          // Migrate: fix accounts that have credentialId as address
+          for (const acct of accounts) {
+            if (!acct.publicKeyHex) continue;
+            const correct = computeAddress(acct.publicKeyHex);
+            if (acct.address !== correct) {
+              acct.address = correct;
+              await saveAccount(acct);
+            }
+          }
           dispatch({ type: 'SET_WALLET', accounts });
         } else {
           dispatch({ type: 'LOADED_EMPTY' });
