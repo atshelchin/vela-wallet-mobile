@@ -2,24 +2,13 @@ import Foundation
 import AuthenticationServices
 import React
 
-/// Native module bridging iOS Passkeys (ASAuthorization) to React Native.
-///
-/// All binary data crosses the bridge as lowercase hex strings — no base64
-/// ambiguity, no Data ↔ NSArray mismatch.
-///
-/// Error codes emitted to JS:
-///   - PASSKEY_CANCELLED      — user dismissed the sheet
-///   - PASSKEY_FAILED         — generic failure
-///   - PASSKEY_NO_CREDENTIAL  — no credential returned
-///   - PASSKEY_NOT_SUPPORTED  — device/OS does not support platform authenticators
 @objc(VelaPasskey)
 class VelaPasskeyModule: NSObject {
 
     static let relyingParty = "getvela.app"
 
-    override init() {
-        super.init()
-    }
+    /// Retained so ARC doesn't release it before the delegate callback fires.
+    private var activeHandler: PasskeyRequestHandler?
 
     @objc static func requiresMainQueueSetup() -> Bool { true }
 
@@ -60,8 +49,8 @@ class VelaPasskeyModule: NSObject {
             userID: uid
         )
 
-        let handler = PasskeyRequestHandler()
-        handler.performRequest(request) { result in
+        performPasskeyRequest(request) { [weak self] result in
+            self?.activeHandler = nil
             switch result {
             case .success(let authorization):
                 guard let reg = authorization.credential
@@ -69,7 +58,6 @@ class VelaPasskeyModule: NSObject {
                     reject("PASSKEY_NO_CREDENTIAL", "No registration credential returned", nil)
                     return
                 }
-
                 let dict: [String: Any] = [
                     "credentialId": reg.credentialID.hexString,
                     "attestationObjectHex": (reg.rawAttestationObject ?? Data()).hexString,
@@ -100,8 +88,8 @@ class VelaPasskeyModule: NSObject {
         )
         let request = provider.createCredentialAssertionRequest(challenge: challenge)
 
-        let handler = PasskeyRequestHandler()
-        handler.performRequest(request) { result in
+        performPasskeyRequest(request) { [weak self] result in
+            self?.activeHandler = nil
             switch result {
             case .success(let authorization):
                 guard let assertion = authorization.credential
@@ -109,7 +97,6 @@ class VelaPasskeyModule: NSObject {
                     reject("PASSKEY_NO_CREDENTIAL", "No assertion credential returned", nil)
                     return
                 }
-
                 var dict: [String: Any] = [
                     "credentialId": assertion.credentialID.hexString,
                     "signatureHex": assertion.signature.hexString,
@@ -150,7 +137,6 @@ class VelaPasskeyModule: NSObject {
         )
         let request = provider.createCredentialAssertionRequest(challenge: challengeData)
 
-        // Pin to a specific credential to avoid the picker
         if let credHex = credentialId, !credHex.isEmpty,
            let credData = Data(hexString: credHex) {
             request.allowedCredentials = [
@@ -158,8 +144,8 @@ class VelaPasskeyModule: NSObject {
             ]
         }
 
-        let handler = PasskeyRequestHandler()
-        handler.performRequest(request) { result in
+        performPasskeyRequest(request) { [weak self] result in
+            self?.activeHandler = nil
             switch result {
             case .success(let authorization):
                 guard let assertion = authorization.credential
@@ -167,7 +153,6 @@ class VelaPasskeyModule: NSObject {
                     reject("PASSKEY_NO_CREDENTIAL", "No assertion credential returned", nil)
                     return
                 }
-
                 var dict: [String: Any] = [
                     "credentialId": assertion.credentialID.hexString,
                     "signatureHex": assertion.signature.hexString,
@@ -185,7 +170,16 @@ class VelaPasskeyModule: NSObject {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Private
+
+    private func performPasskeyRequest(
+        _ request: ASAuthorizationRequest,
+        completion: @escaping (Result<ASAuthorization, Error>) -> Void
+    ) {
+        let handler = PasskeyRequestHandler()
+        self.activeHandler = handler  // prevent ARC from releasing before callback
+        handler.performRequest(request, completion: completion)
+    }
 
     private static func rejectWithPasskeyError(
         _ error: Error,
@@ -213,8 +207,6 @@ class VelaPasskeyModule: NSObject {
 
 // MARK: - PasskeyRequestHandler
 
-/// Encapsulates the ASAuthorizationController delegate dance so that each
-/// request gets its own handler instance (avoids shared-state bugs).
 private class PasskeyRequestHandler: NSObject,
     ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding {
