@@ -26,7 +26,7 @@ interface CreateRequest {
 
 /** Fetch a one-time challenge (5-minute validity). */
 export async function getChallenge(): Promise<string> {
-  const response = await fetch(`${BASE_URL}/challenge`);
+  const response = await fetch(`${BASE_URL}/api/challenge`);
   if (!response.ok) throw new Error(`Challenge request failed: ${response.status}`);
   const data: { challenge: string } = await response.json();
   return data.challenge;
@@ -34,7 +34,7 @@ export async function getChallenge(): Promise<string> {
 
 /** Store a public key record after passkey creation. */
 export async function createRecord(request: CreateRequest): Promise<PublicKeyRecord> {
-  const response = await fetch(`${BASE_URL}/credentials`, {
+  const response = await fetch(`${BASE_URL}/api/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -48,7 +48,7 @@ export async function createRecord(request: CreateRequest): Promise<PublicKeyRec
 
 /** Query a public key by rpId and credentialId. */
 export async function queryRecord(rpId: string, credentialId: string): Promise<PublicKeyRecord> {
-  const url = `${BASE_URL}/credentials?rpId=${encodeURIComponent(rpId)}&credentialId=${encodeURIComponent(credentialId)}`;
+  const url = `${BASE_URL}/api/query?rpId=${encodeURIComponent(rpId)}&credentialId=${encodeURIComponent(credentialId)}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Query failed: ${response.status}`);
   return response.json();
