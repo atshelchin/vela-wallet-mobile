@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "app.getvela.wallet",
+      "bundleIdentifier": "app.getvela.VelaWallet",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
         "NSBluetoothPeripheralUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
