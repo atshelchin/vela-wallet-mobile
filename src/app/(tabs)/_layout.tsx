@@ -1,9 +1,16 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VelaColor } from '@/constants/theme';
 import { Wallet, Globe, Settings } from 'lucide-react-native';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  // Android nav bar: use safe area bottom inset; iOS handled natively
+  const bottomPadding = Platform.OS === 'android' ? insets.bottom + 6 : 8;
+  const tabHeight = Platform.OS === 'android' ? 56 + insets.bottom : 60;
+
   return (
     <Tabs
       screenOptions={{
@@ -13,8 +20,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: VelaColor.bgCard,
           borderTopColor: VelaColor.border,
-          paddingBottom: 8,
-          height: 60,
+          paddingBottom: bottomPadding,
+          height: tabHeight,
         },
       }}
     >
