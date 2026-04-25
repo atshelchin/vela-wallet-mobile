@@ -60,7 +60,10 @@ export function AppModal({ visible, children, animationType = 'slide', onRequest
 
 const styles = StyleSheet.create({
   wrapper: {
-    position: 'absolute',
+    // 'fixed' normally targets viewport, but #root has transform:translateZ(0)
+    // which makes fixed position relative to #root instead. This ensures
+    // the modal covers everything including the tab bar.
+    position: 'fixed' as any,
     top: 0,
     left: 0,
     right: 0,
