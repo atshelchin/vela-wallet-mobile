@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppModal } from '@/components/ui/AppModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { VelaColor, VelaFont, VelaRadius } from '@/constants/theme';
 
@@ -33,7 +34,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
+    <AppModal visible={visible}>
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
@@ -83,7 +84,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           Point the camera at a QR code containing a wallet address
         </Text>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

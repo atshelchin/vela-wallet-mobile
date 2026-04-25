@@ -7,8 +7,8 @@ import {
   StyleSheet,
   Alert,
   TextInput,
-  Modal,
 } from 'react-native';
+import { AppModal } from '@/components/ui/AppModal';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -177,7 +177,7 @@ function AccountSwitcherModal({
   const router = useRouter();
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <AppModal visible={visible}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Accounts</Text>
@@ -232,7 +232,7 @@ function AccountSwitcherModal({
           </View>
         </ScrollView>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -257,7 +257,7 @@ function LanguagePickerModal({
   const [selected, setSelected] = useState<AppLanguage>('english');
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <AppModal visible={visible}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Language</Text>
@@ -301,7 +301,7 @@ function LanguagePickerModal({
           })}
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -331,7 +331,7 @@ function NetworkEditorModal({
   }, []);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <AppModal visible={visible}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Networks</Text>
@@ -358,7 +358,7 @@ function NetworkEditorModal({
           })}
         </ScrollView>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

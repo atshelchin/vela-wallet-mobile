@@ -7,8 +7,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
+import { AppModal } from '@/components/ui/AppModal';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -103,7 +103,7 @@ function AccountPickerModal({
   const { state, dispatch } = useWallet();
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <AppModal visible={visible}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Account</Text>
@@ -140,7 +140,7 @@ function AccountPickerModal({
           })}
         </ScrollView>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
