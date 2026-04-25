@@ -139,6 +139,8 @@ function withAndroidPermissions(config) {
       'android.permission.BLUETOOTH_ADMIN',
       'android.permission.BLUETOOTH_ADVERTISE',
       'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.BLUETOOTH_SCAN',
+      'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.CAMERA',
     ];
 

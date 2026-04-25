@@ -80,9 +80,32 @@ class VelaBLEModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
 
     @ReactMethod
     fun requestPermissions(promise: Promise) {
-        // Android runtime permissions are handled at the app level via manifest / PermissionsAndroid
         val adapter = bluetoothManager?.adapter
-        promise.resolve(adapter?.isEnabled == true)
+        if (adapter == null || !adapter.isEnabled) {
+            promise.resolve(false)
+            return
+        }
+
+        // Android 12+: request runtime BLE permissions
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val activity = getCurrentActivity()
+            if (activity != null) {
+                val perms = arrayOf(
+                    android.Manifest.permission.BLUETOOTH_ADVERTISE,
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                )
+                val missing = perms.filter {
+                    androidx.core.content.ContextCompat.checkSelfPermission(activity, it) !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                }
+                if (missing.isNotEmpty()) {
+                    androidx.core.app.ActivityCompat.requestPermissions(activity, missing.toTypedArray(), 1001)
+                    // Best effort — resolve true after requesting
+                }
+            }
+        }
+
+        promise.resolve(true)
     }
 
     @ReactMethod
