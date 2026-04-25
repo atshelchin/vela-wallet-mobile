@@ -24,14 +24,17 @@ export default function OnboardingScreen() {
   async function handleLogin() {
     try {
       setLoginLoading(true);
+      console.log('[Login] Starting login...');
 
       const supported = await Passkey.isSupported();
+      console.log('[Login] Passkey supported:', supported);
       if (!supported) {
         Alert.alert('Not Supported', 'Passkeys are not supported on this device.');
         return;
       }
 
       // 1. Authenticate with existing passkey
+      console.log('[Login] Calling authenticate()...');
       const assertion = await Passkey.authenticate();
       console.log('[Login] credentialId:', assertion.credentialId);
       console.log('[Login] userIdHex:', assertion.userIdHex ?? 'none');

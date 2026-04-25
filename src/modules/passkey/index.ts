@@ -133,7 +133,10 @@ async function webRegister(userName: string): Promise<PasskeyRegistrationResult>
           displayName: userName,
         },
         challenge,
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 (P-256)
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },  // ES256 (P-256) — preferred
+          { type: 'public-key', alg: -257 }, // RS256 — fallback for compatibility
+        ],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           residentKey: 'required',
