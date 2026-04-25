@@ -11,7 +11,7 @@ import { fetchTokens } from '@/services/wallet-api';
 import { loadCustomTokens } from '@/services/storage';
 import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBalance, shortAddr, type APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
-import { ArrowUpRight, ArrowDownLeft, Clock } from 'lucide-react-native';
+import { ArrowUp, ArrowDown, Menu, Copy } from 'lucide-react-native';
 
 const AUTO_REFRESH_MS = 30_000;
 
@@ -118,10 +118,12 @@ export default function HomeScreen() {
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
+  const [copied, setCopied] = useState(false);
   const copyAddress = async () => {
     if (!address) return;
     await Clipboard.setStringAsync(address);
-    Alert.alert('Copied', 'Address copied to clipboard.');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const navigateToToken = (token: APIToken) => {
@@ -144,10 +146,14 @@ export default function HomeScreen() {
   const renderHeader = () => (
     <View style={styles.header}>
       {/* Account name + address */}
-      <TouchableOpacity style={styles.accountRow} onPress={copyAddress} activeOpacity={0.7}>
+      <View style={styles.accountRow}>
         <Text style={styles.accountName}>{accountName}</Text>
-        <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.addrRow} onPress={copyAddress} activeOpacity={0.7}>
+          <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
+          <Copy size={12} color={copied ? VelaColor.accent : VelaColor.textTertiary} />
+          {copied && <Text style={styles.copiedText}>Copied</Text>}
+        </TouchableOpacity>
+      </View>
 
       {/* Total balance */}
       <View style={styles.balanceRow}>
@@ -157,9 +163,9 @@ export default function HomeScreen() {
 
       {/* Action buttons */}
       <View style={styles.actionRow}>
-        <ActionButton label="Send" icon={ArrowUpRight} onPress={() => router.push('/send')} />
-        <ActionButton label="Receive" icon={ArrowDownLeft} onPress={() => router.push('/receive')} />
-        <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
+        <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} />
+        <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
+        <ActionButton label="History" icon={Menu} onPress={() => router.push('/history')} />
       </View>
     </View>
   );
@@ -198,11 +204,11 @@ export default function HomeScreen() {
   );
 }
 
-function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: React.ComponentType<{ size: number; color: string }>; onPress: () => void }) {
+function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: React.ComponentType<any>; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.actionIconBg}>
-        <Icon size={20} color={VelaColor.accent} />
+        <Icon size={20} color="#FFFFFF" strokeWidth={2.5} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </TouchableOpacity>
@@ -225,10 +231,20 @@ const styles = StyleSheet.create({
     ...VelaFont.title(18),
     color: VelaColor.textPrimary,
   },
+  addrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 3,
+  },
   accountAddr: {
     ...VelaFont.mono(13),
     color: VelaColor.textTertiary,
-    marginTop: 3,
+  },
+  copiedText: {
+    ...VelaFont.caption(),
+    color: VelaColor.accent,
+    marginLeft: 2,
   },
   balanceRow: {
     flexDirection: 'row',
@@ -258,7 +274,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: VelaColor.accentSoft,
+    backgroundColor: VelaColor.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },

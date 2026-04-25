@@ -13,6 +13,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: VelaColor.bgCard,
           borderTopColor: VelaColor.border,
+          paddingBottom: 8,
+          height: 60,
         },
       }}
     >
