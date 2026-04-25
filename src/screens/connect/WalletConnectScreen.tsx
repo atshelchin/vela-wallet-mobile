@@ -38,12 +38,12 @@ export default function WalletConnectScreen() {
 
     setConnectState('connecting');
     try {
-      // Dynamic import to avoid bundling WC on native
+      console.log('[WC] Initializing...');
       const { Core } = await import('@walletconnect/core');
       const { Web3Wallet } = await import('@walletconnect/web3wallet');
 
       const core = new Core({
-        projectId: '2b8de379a677e5e4b0e1e4e5e4b0e1e4', // public demo ID
+        projectId: 'a9e7ed3cabe8032e0eee37e9ac7ee0c2', // WalletConnect Cloud
       });
 
       const wallet = await Web3Wallet.init({
@@ -55,35 +55,52 @@ export default function WalletConnectScreen() {
           icons: ['https://getvela.app/favicon.png'],
         },
       });
+      console.log('[WC] Initialized');
 
       // Handle session proposal
       wallet.on('session_proposal', async (proposal: any) => {
+        console.log('[WC] Session proposal received:', JSON.stringify(proposal.params?.requiredNamespaces));
         const { id, params } = proposal;
-        const namespaces: any = {};
 
-        // Build approval namespaces
-        const chains = params.requiredNamespaces?.eip155?.chains ?? ['eip155:137'];
-        const methods = params.requiredNamespaces?.eip155?.methods ?? [
+        // Support all EVM chains the dApp requests
+        const required = params.requiredNamespaces?.eip155 ?? {};
+        const optional = params.optionalNamespaces?.eip155 ?? {};
+        const chains = required.chains ?? optional.chains ?? ['eip155:137'];
+        const methods = [
+          ...(required.methods ?? []),
+          ...(optional.methods ?? []),
           'eth_sendTransaction', 'personal_sign', 'eth_signTypedData_v4',
-          'eth_accounts', 'eth_chainId',
+          'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain',
         ];
-        const events = params.requiredNamespaces?.eip155?.events ?? [
+        const events = [
+          ...(required.events ?? []),
+          ...(optional.events ?? []),
           'chainChanged', 'accountsChanged',
         ];
 
-        namespaces.eip155 = {
-          chains,
-          accounts: chains.map((c: string) => `${c}:${address}`),
-          methods,
-          events,
+        // Deduplicate
+        const uniqueMethods = [...new Set(methods)];
+        const uniqueEvents = [...new Set(events)];
+
+        const namespaces: any = {
+          eip155: {
+            chains,
+            accounts: chains.map((c: string) => `${c}:${address}`),
+            methods: uniqueMethods,
+            events: uniqueEvents,
+          },
         };
 
+        console.log('[WC] Approving with namespaces:', JSON.stringify(namespaces));
         try {
           const session = await wallet.approveSession({ id, namespaces });
+          console.log('[WC] Session approved, topic:', session.topic);
           setActiveTopic(session.topic);
           setPeerName(session.peer?.metadata?.name ?? 'dApp');
           setConnectState('connected');
-        } catch {
+        } catch (err: any) {
+          console.error('[WC] Session approval failed:', err.message);
+          Alert.alert('Connection Failed', err.message ?? 'Session approval failed');
           setConnectState('idle');
         }
       });
@@ -96,6 +113,8 @@ export default function WalletConnectScreen() {
         const reqParams = request.params ?? [];
         const chainIdFromParams = params.chainId?.split(':')[1];
         const cid = chainIdFromParams ? parseInt(chainIdFromParams) : currentChainId;
+
+        console.log('[WC] Request:', method, 'id:', id);
 
         // Auto-reply read-only methods
         if (method === 'wallet_switchEthereumChain') {
@@ -123,7 +142,7 @@ export default function WalletConnectScreen() {
             origin: peerName,
           });
         } else {
-          // Unknown method
+          console.log('[WC] Unknown method, returning error:', method);
           await wallet.respondSessionRequest({
             topic,
             response: { id, jsonrpc: '2.0', error: { code: -32601, message: `Method not supported: ${method}` } },
@@ -133,15 +152,19 @@ export default function WalletConnectScreen() {
 
       // Handle disconnect
       wallet.on('session_delete', () => {
+        console.log('[WC] Session deleted');
         setConnectState('idle');
         setActiveTopic(null);
         setPeerName('');
         setIncomingRequest(null);
       });
 
+      console.log('[WC] Pairing with URI...');
       await wallet.pair({ uri: wcUri.trim() });
+      console.log('[WC] Pair request sent, waiting for proposal...');
       setWeb3wallet(wallet);
     } catch (err: any) {
+      console.error('[WC] Connection error:', err);
       Alert.alert('Connection Failed', err.message ?? 'Could not connect');
       setConnectState('idle');
     }
