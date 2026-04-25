@@ -35,7 +35,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun register(userName: String, promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("PASSKEY_FAILED", "No activity available")
             return
@@ -64,8 +64,8 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 """.trimIndent()
 
                 val request = CreatePublicKeyCredentialRequest(json)
-                val credentialManager = CredentialManager.create(activity)
-                val result = credentialManager.createCredential(activity, request)
+                val credentialManager = CredentialManager.create(reactApplicationContext)
+                val result = credentialManager.createCredential(activity!!, request)
                 val response = result as CreatePublicKeyCredentialResponse
 
                 val responseJson = JSONObject(response.registrationResponseJson)
@@ -85,7 +85,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: CreateCredentialCancellationException) {
                 promise.reject("PASSKEY_CANCELLED", "User cancelled registration", e)
             } catch (e: CreateCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
+                promise.reject("PASSKEY_FAILED", e.message ?: "Registration failed", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
@@ -94,7 +94,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun authenticate(promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("PASSKEY_FAILED", "No activity available")
             return
@@ -114,8 +114,8 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 """.trimIndent()
 
                 val request = GetCredentialRequest(listOf(GetPublicKeyCredentialOption(json)))
-                val credentialManager = CredentialManager.create(activity)
-                val result = credentialManager.getCredential(activity, request)
+                val credentialManager = CredentialManager.create(reactApplicationContext)
+                val result = credentialManager.getCredential(activity!!, request)
                 resolveAssertion(result, promise)
 
             } catch (e: GetCredentialCancellationException) {
@@ -123,7 +123,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: NoCredentialException) {
                 promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
+                promise.reject("PASSKEY_FAILED", e.message ?: "Failed", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
@@ -132,7 +132,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun sign(challengeHex: String, credentialId: String?, promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("PASSKEY_FAILED", "No activity available")
             return
@@ -152,8 +152,8 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 """.trimIndent()
 
                 val request = GetCredentialRequest(listOf(GetPublicKeyCredentialOption(json)))
-                val credentialManager = CredentialManager.create(activity)
-                val result = credentialManager.getCredential(activity, request)
+                val credentialManager = CredentialManager.create(reactApplicationContext)
+                val result = credentialManager.getCredential(activity!!, request)
                 resolveAssertion(result, promise)
 
             } catch (e: GetCredentialCancellationException) {
@@ -161,7 +161,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: NoCredentialException) {
                 promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
+                promise.reject("PASSKEY_FAILED", e.message ?: "Failed", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }

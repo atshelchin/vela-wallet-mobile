@@ -365,6 +365,46 @@ function withXcodeProjectFiles(config) {
 }
 
 // ---------------------------------------------------------------------------
+// Android – Add gradle dependencies for native modules
+// ---------------------------------------------------------------------------
+
+function withAndroidDependencies(config) {
+  return withDangerousMod(config, [
+    'android',
+    (mod) => {
+      const buildGradlePath = path.join(
+        mod.modRequest.projectRoot, 'android', 'app', 'build.gradle',
+      );
+      if (!fs.existsSync(buildGradlePath)) return mod;
+
+      let content = fs.readFileSync(buildGradlePath, 'utf8');
+
+      const deps = [
+        'implementation("androidx.credentials:credentials:1.5.0")',
+        'implementation("androidx.credentials:credentials-play-services-auth:1.5.0")',
+        'implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")',
+      ];
+
+      for (const dep of deps) {
+        if (!content.includes(dep)) {
+          // Insert after the first implementation line
+          const insertPoint = content.indexOf('implementation("com.facebook.react:react-android")');
+          if (insertPoint !== -1) {
+            const endOfLine = content.indexOf('\n', insertPoint);
+            content = content.slice(0, endOfLine + 1) +
+              '    ' + dep + '\n' +
+              content.slice(endOfLine + 1);
+          }
+        }
+      }
+
+      fs.writeFileSync(buildGradlePath, content, 'utf8');
+      return mod;
+    },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
 // Main plugin – composes all sub-plugins
 // ---------------------------------------------------------------------------
 
@@ -378,6 +418,7 @@ function withNativeModules(config) {
   // Android
   config = withAndroidPermissions(config);
   config = withAndroidSourceFiles(config);
+  config = withAndroidDependencies(config);
 
   return config;
 }
