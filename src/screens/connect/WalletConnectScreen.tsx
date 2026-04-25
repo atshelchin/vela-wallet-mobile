@@ -16,7 +16,7 @@ import { PasskeyErrorCode } from '@/modules/passkey';
 import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
 
 const WS_URL = 'ws://localhost:9710';
-const DPP_PROTOCOL = 'dpp://connect';
+const DPP_PROTOCOL = 'vela-dapp://connect';
 const DPP_DOWNLOAD_URL = 'https://getvela.app/dpp-browser';
 
 type ConnectState = 'idle' | 'connecting' | 'connected' | 'not-installed';
@@ -46,14 +46,16 @@ export default function WebConnectScreen() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setConnectState('connecting');
+    let didConnect = false;
+
     const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
       console.log('[WS] Connected to dApp Browser');
+      didConnect = true;
       setConnectState('connected');
       setPeerName('dApp Browser');
 
-      // Push wallet info immediately
       ws.send(JSON.stringify({
         type: 'wallet_info',
         address: addressRef.current,
@@ -65,7 +67,7 @@ export default function WebConnectScreen() {
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data);
+        const msg = JSON.parse(typeof event.data === 'string' ? event.data : '');
         handleMessage(msg);
       } catch (err) {
         console.error('[WS] Parse error:', err);
@@ -75,17 +77,20 @@ export default function WebConnectScreen() {
     ws.onclose = () => {
       console.log('[WS] Disconnected');
       wsRef.current = null;
-      if (connectState === 'connected') {
-        setConnectState('idle');
-      }
       setIncomingRequest(null);
+      if (didConnect) {
+        setConnectState('idle'); // was connected, now disconnected
+      }
     };
 
     ws.onerror = () => {
-      // Connection refused — dApp browser not running
-      ws.close();
-      wsRef.current = null;
-      tryLaunchDppBrowser();
+      if (!didConnect) {
+        // Never connected — dApp browser not running
+        console.log('[WS] Connection refused');
+        ws.close();
+        wsRef.current = null;
+        tryLaunchDppBrowser();
+      }
     };
 
     wsRef.current = ws;
