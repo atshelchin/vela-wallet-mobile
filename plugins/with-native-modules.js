@@ -398,6 +398,12 @@ function withAndroidDependencies(config) {
         }
       }
 
+      // Use global debug keystore so SHA256 matches assetlinks.json
+      content = content.replace(
+        "storeFile file('debug.keystore')",
+        "storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')",
+      );
+
       fs.writeFileSync(buildGradlePath, content, 'utf8');
       return mod;
     },
