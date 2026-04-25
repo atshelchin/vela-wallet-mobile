@@ -86,6 +86,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     overflow: 'hidden',
     maxHeight: '92%',
+    paddingBottom: 80, // space for tab bar underneath
     // @ts-ignore web-only
     transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     transform: [{ translateY: 900 }],
