@@ -24,13 +24,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="nfts"
-        options={{
-          title: 'NFTs',
-          tabBarIcon: ({ color }) => <TabIcon name="nfts" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="dapps"
         options={{
           title: 'dApps',

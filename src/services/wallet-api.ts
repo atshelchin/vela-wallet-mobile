@@ -26,19 +26,6 @@ export async function fetchTokens(address: string): Promise<APIToken[]> {
   return data.tokens.filter(t => !t.spam);
 }
 
-/** Fetch NFTs across all supported networks. */
-export async function fetchNFTs(address: string): Promise<APINFT[]> {
-  const url = `${BASE_URL}/nft?address=${encodeURIComponent(address)}`;
-  const response = await fetch(url, { cache: 'no-store' });
-
-  if (!response.ok) {
-    throw new APIError(`/nft failed: HTTP ${response.status}`);
-  }
-
-  const data: { nfts: APINFT[] } = await response.json();
-  return data.nfts;
-}
-
 /** Fetch USD to target currency exchange rate. */
 export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
   const url = `${BASE_URL}/exchange-rate?currency=${encodeURIComponent(currency)}`;

@@ -28,7 +28,6 @@ export default function RootLayout() {
           <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
           <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
           <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="nft-detail" options={{ presentation: 'modal' }} />
           <Stack.Screen name="history" options={{ presentation: 'modal' }} />
         </Stack>
       </ThemeProvider>
