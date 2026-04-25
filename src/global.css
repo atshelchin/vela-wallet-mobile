@@ -27,4 +27,11 @@
     box-shadow: 0 8px 40px rgba(0,0,0,0.15) !important;
     position: relative !important;
   }
+
+  /* Force modals/overlays to stay inside #root instead of viewport */
+  [style*="position: fixed"],
+  [data-testid],
+  div[style*="position:fixed"] {
+    position: absolute !important;
+  }
 }

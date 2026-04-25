@@ -37,13 +37,23 @@ export default function WebConnectScreen() {
   const chainIdRef = useRef(currentChainId);
   const addressRef = useRef(address);
 
+  const accountNameRef = useRef(accountName);
+  const accountsRef = useRef(state.accounts);
   useEffect(() => { chainIdRef.current = currentChainId; }, [currentChainId]);
   useEffect(() => { addressRef.current = address; }, [address]);
+  useEffect(() => { accountNameRef.current = accountName; }, [accountName]);
+  useEffect(() => { accountsRef.current = state.accounts; }, [state.accounts]);
 
   // --- WebSocket connection ---
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // Close any existing connection first
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
 
     setConnectState('connecting');
     let didConnect = false;
@@ -60,8 +70,8 @@ export default function WebConnectScreen() {
         type: 'wallet_info',
         address: addressRef.current,
         chainId: chainIdRef.current,
-        name: accountName,
-        accounts: state.accounts.map(a => ({ name: a.name, address: a.address })),
+        name: accountNameRef.current,
+        accounts: accountsRef.current.map(a => ({ name: a.name, address: a.address })),
       }));
     };
 
@@ -85,16 +95,14 @@ export default function WebConnectScreen() {
 
     ws.onerror = () => {
       if (!didConnect) {
-        // Never connected — dApp browser not running
-        console.log('[WS] Connection refused');
-        ws.close();
+        console.log('[WS] Connection refused — dApp Browser not running');
         wsRef.current = null;
-        tryLaunchDppBrowser();
+        setConnectState('not-installed');
       }
     };
 
     wsRef.current = ws;
-  }, [accountName, state.accounts]);
+  }, []); // no deps — uses refs for all dynamic values
 
   const disconnect = useCallback(() => {
     wsRef.current?.close();
