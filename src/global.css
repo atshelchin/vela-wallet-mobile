@@ -7,3 +7,24 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+/* Desktop web: constrain to phone dimensions */
+@media (min-width: 500px) {
+  html, body {
+    background: #E8E8E8 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-height: 100vh;
+  }
+
+  #root {
+    width: 390px !important;
+    height: 844px !important;
+    max-height: 100vh !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.15) !important;
+    position: relative !important;
+  }
+}
