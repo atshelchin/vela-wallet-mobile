@@ -146,8 +146,18 @@ export default function DAppScreen() {
     }
   }, []);
 
+  // Push wallet info when account/chain changes (NOT on connect — native layer handles that)
+  const wasConnected = useRef(false);
   useEffect(() => {
-    if (connectState === 'connected') pushWalletInfo();
+    if (connectState === 'connected') {
+      if (wasConnected.current) {
+        // Already connected — push updated info
+        pushWalletInfo();
+      }
+      wasConnected.current = true;
+    } else {
+      wasConnected.current = false;
+    }
   }, [address, accountName, currentChainId, connectState, pushWalletInfo]);
 
   // =========================================================================
