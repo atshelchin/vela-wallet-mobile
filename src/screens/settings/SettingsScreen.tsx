@@ -18,7 +18,7 @@ import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme'
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
-import { User as UserIcon, Globe as NetworkIcon, Languages as LanguagesIcon, Info as InfoIcon, LogOut as LogOutIcon, Check } from 'lucide-react-native';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check } from 'lucide-react-native';
 import type { NetworkConfig } from '@/models/types';
 
 // ---------------------------------------------------------------------------
@@ -233,71 +233,6 @@ function AccountSwitcherModal({
 // Language Picker Modal
 // ---------------------------------------------------------------------------
 
-type AppLanguage = 'english' | 'chinese';
-
-const LANGUAGES: { id: AppLanguage; flag: string; name: string }[] = [
-  { id: 'english', flag: 'EN', name: 'English' },
-  { id: 'chinese', flag: 'ZH', name: '中文' },
-];
-
-function LanguagePickerModal({
-  visible,
-  onClose,
-}: {
-  visible: boolean;
-  onClose: () => void;
-}) {
-  const [selected, setSelected] = useState<AppLanguage>('english');
-
-  return (
-    <AppModal visible={visible} onClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Language</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.modalClose}>Done</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.languageList}>
-          {LANGUAGES.map((lang) => {
-            const isSelected = lang.id === selected;
-            return (
-              <TouchableOpacity
-                key={lang.id}
-                style={[styles.languageItem, isSelected && styles.languageItemActive]}
-                onPress={() => {
-                  if (lang.id !== selected) {
-                    Alert.alert(
-                      lang.id === 'chinese' ? '切换语言' : 'Switch Language',
-                      lang.id === 'chinese'
-                        ? '切换语言需要重新打开应用才能生效。'
-                        : 'Switching language requires reopening the app to take effect.',
-                      [
-                        { text: lang.id === 'chinese' ? '取消' : 'Cancel', style: 'cancel' },
-                        {
-                          text: lang.id === 'chinese' ? '切换' : 'Switch',
-                          onPress: () => setSelected(lang.id),
-                        },
-                      ],
-                    );
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.languageFlag}>{lang.flag}</Text>
-                <Text style={styles.languageName}>{lang.name}</Text>
-                <View style={styles.languageSpacer} />
-                {isSelected && <Check size={18} color={VelaColor.accent} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-    </AppModal>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Network Editor Modal
 // ---------------------------------------------------------------------------
@@ -365,7 +300,6 @@ export default function SettingsScreen() {
 
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
-  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
@@ -420,13 +354,6 @@ export default function SettingsScreen() {
         {/* General Section */}
         <SettingsSection title="General">
           <SettingsRow
-            icon={{ bg: VelaColor.greenSoft, fg: VelaColor.green, Icon: LanguagesIcon }}
-            title="Language"
-            subtitle="English"
-            showDivider={true}
-            onPress={() => setShowLanguagePicker(true)}
-          />
-          <SettingsRow
             icon={{ bg: VelaColor.bgWarm, fg: VelaColor.textSecondary, Icon: InfoIcon }}
             title="About"
             subtitle="Vela Wallet v1.0.0"
@@ -449,10 +376,6 @@ export default function SettingsScreen() {
       <NetworkEditorModal
         visible={showNetworkEditor}
         onClose={() => setShowNetworkEditor(false)}
-      />
-      <LanguagePickerModal
-        visible={showLanguagePicker}
-        onClose={() => setShowLanguagePicker(false)}
       />
     </ScreenContainer>
   );
