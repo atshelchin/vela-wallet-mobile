@@ -16,6 +16,8 @@
     justify-content: center !important;
     align-items: center !important;
     min-height: 100vh;
+    margin: 0;
+    padding: 0;
   }
 
   #root {
@@ -26,12 +28,12 @@
     overflow: hidden !important;
     box-shadow: 0 8px 40px rgba(0,0,0,0.15) !important;
     position: relative !important;
-  }
 
-  /* Force modals/overlays to stay inside #root instead of viewport */
-  [style*="position: fixed"],
-  [data-testid],
-  div[style*="position:fixed"] {
-    position: absolute !important;
+    /*
+     * This is the key trick: transform creates a new containing block
+     * for position:fixed descendants, making them behave like
+     * position:absolute relative to #root instead of the viewport.
+     */
+    transform: translateZ(0);
   }
 }
