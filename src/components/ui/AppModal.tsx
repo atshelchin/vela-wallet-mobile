@@ -1,43 +1,113 @@
 /**
  * Cross-platform modal that stays inside #root on web.
  *
- * - iOS/Android: uses native <Modal> (unchanged)
- * - Web: absolute overlay with slide-up + fade animation
+ * Features:
+ * - iOS/Android: native <Modal> with drag-to-dismiss handle
+ * - Web: animated overlay with slide-up, backdrop dismiss, drag-to-dismiss
+ * - Pull-down gesture on the handle bar closes the modal on all platforms
  */
-import React, { useEffect, useState } from 'react';
-import { Modal, View, StyleSheet, Platform, Pressable } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import {
+  Modal,
+  View,
+  StyleSheet,
+  Platform,
+  Pressable,
+  PanResponder,
+  Animated,
+} from 'react-native';
 
 interface Props {
   visible: boolean;
   children: React.ReactNode;
+  onClose?: () => void;
   animationType?: 'none' | 'slide' | 'fade';
-  presentationStyle?: 'fullScreen' | 'pageSheet';
-  onRequestClose?: () => void;
 }
 
-export function AppModal({ visible, children, animationType = 'slide', onRequestClose }: Props) {
+export function AppModal({ visible, children, onClose, animationType = 'slide' }: Props) {
+  // --- Native (iOS / Android) ---
   if (Platform.OS !== 'web') {
     return (
-      <Modal visible={visible} animationType={animationType} presentationStyle="pageSheet" onRequestClose={onRequestClose}>
-        {children}
+      <Modal
+        visible={visible}
+        animationType={animationType}
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
+      >
+        <View style={styles.nativeWrapper}>
+          <DragHandle onClose={onClose} />
+          {children}
+        </View>
       </Modal>
     );
   }
 
-  // Web: animated overlay
+  // --- Web ---
+  return <WebModal visible={visible} onClose={onClose}>{children}</WebModal>;
+}
+
+// ---------------------------------------------------------------------------
+// Drag handle (shared)
+// ---------------------------------------------------------------------------
+
+function DragHandle({ onClose }: { onClose?: () => void }) {
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 5,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80) {
+          onClose?.();
+        }
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 10,
+        }).start();
+      },
+    }),
+  ).current;
+
+  return (
+    <Animated.View
+      style={[styles.handleArea, { transform: [{ translateY }] }]}
+      {...panResponder.panHandlers}
+    >
+      <View style={styles.handleBar} />
+    </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Web modal with animation
+// ---------------------------------------------------------------------------
+
+function WebModal({
+  visible,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  onClose?: () => void;
+  children: React.ReactNode;
+}) {
   const [mounted, setMounted] = useState(false);
-  const [animating, setAnimating] = useState(false);
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      // Trigger animation on next frame
-      requestAnimationFrame(() => requestAnimationFrame(() => setAnimating(true)));
+      requestAnimationFrame(() => requestAnimationFrame(() => setShow(true)));
     } else {
-      setAnimating(false);
-      // Unmount after transition
-      const timer = setTimeout(() => setMounted(false), 300);
-      return () => clearTimeout(timer);
+      setShow(false);
+      const t = setTimeout(() => setMounted(false), 300);
+      return () => clearTimeout(t);
     }
   }, [visible]);
 
@@ -45,24 +115,44 @@ export function AppModal({ visible, children, animationType = 'slide', onRequest
 
   return (
     <View style={styles.wrapper}>
-      {/* Backdrop */}
       <Pressable
-        style={[styles.backdrop, animating && styles.backdropVisible]}
-        onPress={onRequestClose}
+        style={[styles.backdrop, show && styles.backdropVisible]}
+        onPress={onClose}
       />
-      {/* Content */}
-      <View style={[styles.content, animating && styles.contentVisible]}>
+      <View style={[styles.content, show && styles.contentVisible]}>
+        <DragHandle onClose={onClose} />
         {children}
       </View>
     </View>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
+  // Native
+  nativeWrapper: {
+    flex: 1,
+    backgroundColor: '#FAFAF8',
+  },
+
+  // Drag handle
+  handleArea: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  handleBar: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#D1D1D1',
+  },
+
+  // Web
   wrapper: {
-    // 'fixed' normally targets viewport, but #root has transform:translateZ(0)
-    // which makes fixed position relative to #root instead. This ensures
-    // the modal covers everything including the tab bar.
     position: 'fixed' as any,
     top: 0,
     left: 0,
@@ -74,7 +164,7 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0)',
-    // @ts-ignore web-only
+    // @ts-ignore web transition
     transition: 'background-color 0.3s ease',
   },
   backdropVisible: {
@@ -85,9 +175,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
-    maxHeight: '92%',
-    paddingBottom: 80, // space for tab bar underneath
-    // @ts-ignore web-only
+    maxHeight: '90%',
+    paddingBottom: 80,
+    // @ts-ignore web transition
     transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     transform: [{ translateY: 900 }],
   },

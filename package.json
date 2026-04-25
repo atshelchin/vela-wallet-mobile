@@ -33,6 +33,7 @@
     "expo-symbols": "~55.0.7",
     "expo-system-ui": "~55.0.16",
     "expo-web-browser": "~55.0.14",
+    "lucide-react-native": "^1.11.0",
     "qrcode": "^1.5.4",
     "react": "19.2.0",
     "react-dom": "19.2.0",
