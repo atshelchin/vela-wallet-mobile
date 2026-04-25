@@ -1,12 +1,11 @@
 /**
  * Cross-platform modal that stays inside #root on web.
  *
- * React Native's <Modal> creates a portal to <body> on web,
- * escaping the phone-frame container. This component uses a
- * full-screen absolute overlay on web instead.
+ * - iOS/Android: uses native <Modal> (unchanged)
+ * - Web: absolute overlay with slide-up + fade animation
  */
-import React from 'react';
-import { Modal, View, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, View, StyleSheet, Platform, Pressable } from 'react-native';
 
 interface Props {
   visible: boolean;
@@ -25,11 +24,34 @@ export function AppModal({ visible, children, animationType = 'slide', onRequest
     );
   }
 
-  if (!visible) return null;
+  // Web: animated overlay
+  const [mounted, setMounted] = useState(false);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      // Trigger animation on next frame
+      requestAnimationFrame(() => requestAnimationFrame(() => setAnimating(true)));
+    } else {
+      setAnimating(false);
+      // Unmount after transition
+      const timer = setTimeout(() => setMounted(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
+  if (!mounted) return null;
 
   return (
-    <View style={styles.overlay}>
-      <View style={styles.content}>
+    <View style={styles.wrapper}>
+      {/* Backdrop */}
+      <Pressable
+        style={[styles.backdrop, animating && styles.backdropVisible]}
+        onPress={onRequestClose}
+      />
+      {/* Content */}
+      <View style={[styles.content, animating && styles.contentVisible]}>
         {children}
       </View>
     </View>
@@ -37,21 +59,35 @@ export function AppModal({ visible, children, animationType = 'slide', onRequest
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  wrapper: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
     zIndex: 9999,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0)',
+    // @ts-ignore web-only
+    transition: 'background-color 0.3s ease',
+  },
+  backdropVisible: {
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   content: {
-    flex: 1,
     backgroundColor: '#FAFAF8',
-    marginTop: 40,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
+    maxHeight: '92%',
+    // @ts-ignore web-only
+    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    transform: [{ translateY: 900 }],
+  },
+  contentVisible: {
+    transform: [{ translateY: 0 }],
   },
 });
