@@ -125,7 +125,7 @@ export default function AddTokenScreen() {
         {/* Nav bar */}
         <View style={styles.navBar}>
           <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-            <Text style={styles.backBtn}>← Back</Text>
+            <Text style={styles.backBtn}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.navTitle}>Add Token</Text>
           <View style={{ width: 50 }} />

@@ -11,6 +11,7 @@ import { fetchTokens } from '@/services/wallet-api';
 import { loadCustomTokens } from '@/services/storage';
 import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBalance, shortAddr, type APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
+import { ArrowUpRight, ArrowDownLeft, Clock } from 'lucide-react-native';
 
 const AUTO_REFRESH_MS = 30_000;
 
@@ -139,9 +140,9 @@ export default function HomeScreen() {
 
       {/* Action buttons */}
       <View style={styles.actionRow}>
-        <ActionButton label="Send" icon="↑" onPress={() => router.push('/send')} />
-        <ActionButton label="Receive" icon="↓" onPress={() => router.push('/receive')} />
-        <ActionButton label="History" icon="≡" onPress={() => router.push('/history')} />
+        <ActionButton label="Send" icon={ArrowUpRight} onPress={() => router.push('/send')} />
+        <ActionButton label="Receive" icon={ArrowDownLeft} onPress={() => router.push('/receive')} />
+        <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
       </View>
     </View>
   );
@@ -180,11 +181,11 @@ export default function HomeScreen() {
   );
 }
 
-function ActionButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: React.ComponentType<{ size: number; color: string }>; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.actionIconBg}>
-        <Text style={styles.actionIcon}>{icon}</Text>
+        <Icon size={20} color={VelaColor.accent} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </TouchableOpacity>

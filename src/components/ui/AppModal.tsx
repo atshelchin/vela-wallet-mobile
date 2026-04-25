@@ -1,12 +1,10 @@
 /**
- * Cross-platform modal that stays inside #root on web.
+ * Cross-platform modal.
  *
- * Features:
- * - iOS/Android: native <Modal> with drag-to-dismiss handle
- * - Web: animated overlay with slide-up, backdrop dismiss, drag-to-dismiss
- * - Pull-down gesture on the handle bar closes the modal on all platforms
+ * - iOS/Android: native <Modal> with drag handle
+ * - Web: portal to #root with slide-up animation, backdrop + drag dismiss
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -15,115 +13,127 @@ import {
   Pressable,
   PanResponder,
   Animated,
+  Dimensions,
 } from 'react-native';
 
 interface Props {
   visible: boolean;
   children: React.ReactNode;
   onClose?: () => void;
-  animationType?: 'none' | 'slide' | 'fade';
 }
 
-export function AppModal({ visible, children, onClose, animationType = 'slide' }: Props) {
-  // --- Native (iOS / Android) ---
+export function AppModal({ visible, children, onClose }: Props) {
   if (Platform.OS !== 'web') {
     return (
-      <Modal
-        visible={visible}
-        animationType={animationType}
-        presentationStyle="pageSheet"
-        onRequestClose={onClose}
-      >
-        <View style={styles.nativeWrapper}>
+      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <View style={styles.nativeRoot}>
           <DragHandle onClose={onClose} />
-          {children}
+          <View style={styles.nativeContent}>{children}</View>
         </View>
       </Modal>
     );
   }
 
-  // --- Web ---
   return <WebModal visible={visible} onClose={onClose}>{children}</WebModal>;
 }
 
 // ---------------------------------------------------------------------------
-// Drag handle (shared)
+// Drag handle
 // ---------------------------------------------------------------------------
 
 function DragHandle({ onClose }: { onClose?: () => void }) {
-  const translateY = useRef(new Animated.Value(0)).current;
+  const pan = useRef(new Animated.Value(0)).current;
 
-  const panResponder = useRef(
+  const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 5,
-      onPanResponderMove: (_, g) => {
-        if (g.dy > 0) translateY.setValue(g.dy);
-      },
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 4,
+      onPanResponderMove: (_, g) => { if (g.dy > 0) pan.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 80) {
+        if (g.dy > 80 || g.vy > 0.5) {
           onClose?.();
         }
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 80,
-          friction: 10,
-        }).start();
+        Animated.spring(pan, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
       },
     }),
   ).current;
 
   return (
-    <Animated.View
-      style={[styles.handleArea, { transform: [{ translateY }] }]}
-      {...panResponder.panHandlers}
-    >
+    <Animated.View style={[styles.handleArea, { transform: [{ translateY: pan }] }]} {...responder.panHandlers}>
       <View style={styles.handleBar} />
     </Animated.View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Web modal with animation
+// Web modal (rendered via DOM portal into #root)
 // ---------------------------------------------------------------------------
 
-function WebModal({
-  visible,
-  onClose,
-  children,
-}: {
-  visible: boolean;
-  onClose?: () => void;
-  children: React.ReactNode;
-}) {
+function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: () => void; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [show, setShow] = useState(false);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+
+  // Create a DOM container as direct child of #root
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;z-index:99999;pointer-events:none;';
+    const root = document.getElementById('root');
+    if (root) {
+      root.appendChild(el);
+      setContainer(el);
+    }
+    return () => { el.remove(); };
+  }, []);
 
   useEffect(() => {
+    if (!container) return;
     if (visible) {
+      container.style.pointerEvents = 'auto';
       setMounted(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setShow(true)));
     } else {
       setShow(false);
-      const t = setTimeout(() => setMounted(false), 300);
+      const t = setTimeout(() => {
+        setMounted(false);
+        if (container) container.style.pointerEvents = 'none';
+      }, 300);
       return () => clearTimeout(t);
     }
-  }, [visible]);
+  }, [visible, container]);
 
-  if (!mounted) return null;
+  if (!container || !mounted) return null;
 
-  return (
-    <View style={styles.wrapper}>
-      <Pressable
-        style={[styles.backdrop, show && styles.backdropVisible]}
-        onPress={onClose}
+  const { createPortal } = require('react-dom');
+
+  return createPortal(
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'absolute', inset: 0,
+          backgroundColor: show ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0)',
+          transition: 'background-color 0.3s ease',
+        }}
       />
-      <View style={[styles.content, show && styles.contentVisible]}>
+      {/* Content sheet */}
+      <div style={{
+        position: 'relative',
+        backgroundColor: '#FAFAF8',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '92%',
+        overflow: 'auto',
+        transform: show ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
         <DragHandle onClose={onClose} />
-        {children}
-      </View>
-    </View>
+        <View style={styles.webContent}>{children}</View>
+      </div>
+    </div>,
+    container,
   );
 }
 
@@ -132,56 +142,9 @@ function WebModal({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Native
-  nativeWrapper: {
-    flex: 1,
-    backgroundColor: '#FAFAF8',
-  },
-
-  // Drag handle
-  handleArea: {
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
-  handleBar: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#D1D1D1',
-  },
-
-  // Web
-  wrapper: {
-    position: 'fixed' as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0)',
-    // @ts-ignore web transition
-    transition: 'background-color 0.3s ease',
-  },
-  backdropVisible: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  content: {
-    backgroundColor: '#FAFAF8',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-    maxHeight: '90%',
-    paddingBottom: 80,
-    // @ts-ignore web transition
-    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    transform: [{ translateY: 900 }],
-  },
-  contentVisible: {
-    transform: [{ translateY: 0 }],
-  },
+  nativeRoot: { flex: 1, backgroundColor: '#FAFAF8' },
+  nativeContent: { flex: 1 },
+  handleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
+  handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: '#D1D1D1' },
+  webContent: { flex: 1 },
 });

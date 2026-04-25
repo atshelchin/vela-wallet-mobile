@@ -72,7 +72,7 @@ export default function ReceiveScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-            <Text style={styles.backBtn}>← Back</Text>
+            <Text style={styles.backBtn}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Receive</Text>
           <View style={{ width: 50 }} />
@@ -88,7 +88,7 @@ export default function ReceiveScreen() {
               <QRCode value={address} size={200} />
             ) : (
               <View style={styles.qrPlaceholder}>
-                <Text style={styles.qrIcon}>⬚</Text>
+                <Text style={styles.qrIcon}>QR</Text>
                 <Text style={styles.qrHint}>QR Code</Text>
               </View>
             )}

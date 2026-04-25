@@ -18,35 +18,28 @@ import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme'
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
+import { User as UserIcon, Globe as NetworkIcon, Languages as LanguagesIcon, Info as InfoIcon, LogOut as LogOutIcon, Check } from 'lucide-react-native';
 import type { NetworkConfig } from '@/models/types';
 
 // ---------------------------------------------------------------------------
 // Settings Row
 // ---------------------------------------------------------------------------
 
-type IconStyle = 'orange' | 'blue' | 'green' | 'gray';
-
-const ICON_STYLES: Record<IconStyle, { bg: string; fg: string; emoji: string }> = {
-  orange: { bg: VelaColor.accentSoft, fg: VelaColor.accent, emoji: '👤' },
-  blue: { bg: VelaColor.blueSoft, fg: VelaColor.blue, emoji: '🌐' },
-  green: { bg: VelaColor.greenSoft, fg: VelaColor.green, emoji: '🌍' },
-  gray: { bg: VelaColor.bgWarm, fg: VelaColor.textSecondary, emoji: 'ℹ️' },
-};
+type IconConfig = { bg: string; fg: string; Icon: React.ComponentType<{ size: number; color: string }> };
 
 function SettingsRow({
-  iconStyle,
+  icon,
   title,
   subtitle,
   showDivider = true,
   onPress,
 }: {
-  iconStyle: IconStyle;
+  icon: IconConfig;
   title: string;
   subtitle?: string;
   showDivider?: boolean;
   onPress?: () => void;
 }) {
-  const style = ICON_STYLES[iconStyle];
   return (
     <TouchableOpacity
       style={styles.settingsRow}
@@ -54,8 +47,8 @@ function SettingsRow({
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
-      <View style={[styles.settingsIcon, { backgroundColor: style.bg }]}>
-        <Text style={styles.settingsIconText}>{style.emoji}</Text>
+      <View style={[styles.settingsIcon, { backgroundColor: icon.bg }]}>
+        <icon.Icon size={18} color={icon.fg} />
       </View>
       <View style={styles.settingsRowContent}>
         <Text style={styles.settingsRowTitle}>{title}</Text>
@@ -177,7 +170,7 @@ function AccountSwitcherModal({
   const router = useRouter();
 
   return (
-    <AppModal visible={visible}>
+    <AppModal visible={visible} onClose={onClose}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Accounts</Text>
@@ -208,7 +201,7 @@ function AccountSwitcherModal({
                   <Text style={styles.accountName}>{account.name}</Text>
                   <Text style={styles.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
-                {isActive && <Text style={styles.checkmark}>✓</Text>}
+                {isActive && <Check size={18} color={VelaColor.accent} />}
               </TouchableOpacity>
             );
           })}
@@ -243,8 +236,8 @@ function AccountSwitcherModal({
 type AppLanguage = 'english' | 'chinese';
 
 const LANGUAGES: { id: AppLanguage; flag: string; name: string }[] = [
-  { id: 'english', flag: '🇺🇸', name: 'English' },
-  { id: 'chinese', flag: '🇨🇳', name: '中文' },
+  { id: 'english', flag: 'EN', name: 'English' },
+  { id: 'chinese', flag: 'ZH', name: '中文' },
 ];
 
 function LanguagePickerModal({
@@ -257,7 +250,7 @@ function LanguagePickerModal({
   const [selected, setSelected] = useState<AppLanguage>('english');
 
   return (
-    <AppModal visible={visible}>
+    <AppModal visible={visible} onClose={onClose}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Language</Text>
@@ -295,7 +288,7 @@ function LanguagePickerModal({
                 <Text style={styles.languageFlag}>{lang.flag}</Text>
                 <Text style={styles.languageName}>{lang.name}</Text>
                 <View style={styles.languageSpacer} />
-                {isSelected && <Text style={styles.checkmarkAccent}>✓</Text>}
+                {isSelected && <Check size={18} color={VelaColor.accent} />}
               </TouchableOpacity>
             );
           })}
@@ -331,7 +324,7 @@ function NetworkEditorModal({
   }, []);
 
   return (
-    <AppModal visible={visible}>
+    <AppModal visible={visible} onClose={onClose}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Networks</Text>
@@ -405,7 +398,7 @@ export default function SettingsScreen() {
         {/* Account Section */}
         <SettingsSection title="Account">
           <SettingsRow
-            iconStyle="orange"
+            icon={{ bg: VelaColor.accentSoft, fg: VelaColor.accent, Icon: UserIcon }}
             title={accountName}
             subtitle={address ? shortAddress(address) : 'Switch account'}
             showDivider={false}
@@ -416,7 +409,7 @@ export default function SettingsScreen() {
         {/* Networks Section */}
         <SettingsSection title="Networks">
           <SettingsRow
-            iconStyle="blue"
+            icon={{ bg: VelaColor.blueSoft, fg: VelaColor.blue, Icon: NetworkIcon }}
             title="Networks"
             subtitle="Edit RPC, Explorer & Bundler URLs"
             showDivider={false}
@@ -427,14 +420,14 @@ export default function SettingsScreen() {
         {/* General Section */}
         <SettingsSection title="General">
           <SettingsRow
-            iconStyle="green"
+            icon={{ bg: VelaColor.greenSoft, fg: VelaColor.green, Icon: LanguagesIcon }}
             title="Language"
             subtitle="English"
             showDivider={true}
             onPress={() => setShowLanguagePicker(true)}
           />
           <SettingsRow
-            iconStyle="gray"
+            icon={{ bg: VelaColor.bgWarm, fg: VelaColor.textSecondary, Icon: InfoIcon }}
             title="About"
             subtitle="Vela Wallet v1.0.0"
             showDivider={false}
@@ -443,7 +436,7 @@ export default function SettingsScreen() {
 
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
-          <Text style={styles.logoutIcon}>↗</Text>
+          <LogOutIcon size={16} color={VelaColor.accent} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>

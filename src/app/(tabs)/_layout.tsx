@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Text } from 'react-native';
 import { VelaColor } from '@/constants/theme';
+import { Wallet, Globe, Settings } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -20,37 +20,23 @@ export default function TabLayout() {
         name="wallet"
         options={{
           title: 'Wallet',
-          tabBarIcon: ({ color }) => <TabIcon name="wallet" color={color} />,
+          tabBarIcon: ({ color, size }) => <Wallet size={size ?? 22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="dapps"
         options={{
           title: 'dApps',
-          tabBarIcon: ({ color }) => <TabIcon name="dapps" color={color} />,
+          tabBarIcon: ({ color, size }) => <Globe size={size ?? 22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color }) => <TabIcon name="settings" color={color} />,
+          tabBarIcon: ({ color, size }) => <Settings size={size ?? 22} color={color} />,
         }}
       />
     </Tabs>
-  );
-}
-
-function TabIcon({ name, color }: { name: string; color: string }) {
-  const icons: Record<string, string> = {
-    wallet: 'W',
-    nfts: 'N',
-    dapps: 'D',
-    settings: 'S',
-  };
-  return (
-    <Text style={{ color, fontSize: 18, fontWeight: '700', width: 24, textAlign: 'center' }}>
-      {icons[name] ?? '?'}
-    </Text>
   );
 }

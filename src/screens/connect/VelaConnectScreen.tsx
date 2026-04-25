@@ -103,7 +103,7 @@ function AccountPickerModal({
   const { state, dispatch } = useWallet();
 
   return (
-    <AppModal visible={visible}>
+    <AppModal visible={visible} onClose={onClose}>
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Account</Text>

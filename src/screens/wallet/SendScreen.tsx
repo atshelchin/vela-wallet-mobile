@@ -364,7 +364,7 @@ export default function SendScreen() {
       <View style={styles.navBar}>
         <TouchableOpacity onPress={handleBack} activeOpacity={0.7}>
           <Text style={styles.navBack}>
-            {step === 'select-token' ? 'Cancel' : '← Back'}
+            {step === 'select-token' ? 'Cancel' : 'Back'}
           </Text>
         </TouchableOpacity>
         {renderStepIndicator()}
