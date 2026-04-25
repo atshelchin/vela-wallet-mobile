@@ -91,10 +91,10 @@ class VelaBLEModule: RCTEventEmitter, CBPeripheralManagerDelegate {
 
     @objc func updateWalletInfo(_ config: NSDictionary, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         advConfig = config as? [String: Any] ?? [:]
-        if let data = try? JSONSerialization.data(withJSONObject: advConfig) {
-            walletInfoChar?.value = data
-        }
-        // Push update via response channel
+        // Don't update walletInfoChar.value — modifying a characteristic value
+        // while a central is connected can trigger a service change indication
+        // that causes CoreBluetooth to disconnect.
+        // Instead, push the update via the response notification channel.
         let response: [String: Any] = ["id": "wallet_info_update", "result": advConfig]
         sendResponseData(response)
         resolve(nil)
