@@ -1,9 +1,11 @@
 /**
- * WalletConnect v2 screen — used on web platform.
- * Connects to dApps via WalletConnect protocol instead of BLE.
+ * Web dApp Connect screen.
+ *
+ * Connects to the local dApp Browser (Electron) via WebSocket on localhost:9710.
+ * Same JSON protocol as BLE: {id, method, params, origin} / {id, result, error}.
  */
-import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Linking, Platform } from 'react-native';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -13,193 +15,162 @@ import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
 
-type ConnectState = 'idle' | 'connecting' | 'connected';
+const WS_URL = 'ws://localhost:9710';
+const DPP_PROTOCOL = 'dpp://connect';
+const DPP_DOWNLOAD_URL = 'https://getvela.app/dpp-browser';
 
-export default function WalletConnectScreen() {
+type ConnectState = 'idle' | 'connecting' | 'connected' | 'not-installed';
+
+export default function WebConnectScreen() {
   const { state, activeAccount } = useWallet();
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
 
   const [connectState, setConnectState] = useState<ConnectState>('idle');
-  const [wcUri, setWcUri] = useState('');
   const [peerName, setPeerName] = useState('');
   const [incomingRequest, setIncomingRequest] = useState<BLEIncomingRequest | null>(null);
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
-  const [currentChainId, setCurrentChainId] = useState(137); // default Polygon
-  const [web3wallet, setWeb3wallet] = useState<any>(null);
-  const [activeTopic, setActiveTopic] = useState<string | null>(null);
+  const [currentChainId, setCurrentChainId] = useState(137);
 
-  const connectWC = useCallback(async () => {
-    if (!wcUri.trim()) {
-      Alert.alert('Error', 'Please paste a WalletConnect URI');
-      return;
-    }
+  const wsRef = useRef<WebSocket | null>(null);
+  const chainIdRef = useRef(currentChainId);
+  const addressRef = useRef(address);
+
+  useEffect(() => { chainIdRef.current = currentChainId; }, [currentChainId]);
+  useEffect(() => { addressRef.current = address; }, [address]);
+
+  // --- WebSocket connection ---
+
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setConnectState('connecting');
-    try {
-      console.log('[WC] Initializing...');
-      const { Core } = await import('@walletconnect/core');
-      const { Web3Wallet } = await import('@walletconnect/web3wallet');
+    const ws = new WebSocket(WS_URL);
 
-      const core = new Core({
-        projectId: 'a9e7ed3cabe8032e0eee37e9ac7ee0c2', // WalletConnect Cloud
-      });
+    ws.onopen = () => {
+      console.log('[WS] Connected to dApp Browser');
+      setConnectState('connected');
+      setPeerName('dApp Browser');
 
-      const wallet = await Web3Wallet.init({
-        core: core as any,
-        metadata: {
-          name: 'Vela Wallet',
-          description: 'Smart Account Wallet',
-          url: 'https://getvela.app',
-          icons: ['https://getvela.app/favicon.png'],
-        },
-      });
-      console.log('[WC] Initialized');
+      // Push wallet info immediately
+      ws.send(JSON.stringify({
+        type: 'wallet_info',
+        address: addressRef.current,
+        chainId: chainIdRef.current,
+        name: accountName,
+        accounts: state.accounts.map(a => ({ name: a.name, address: a.address })),
+      }));
+    };
 
-      // Handle session proposal
-      wallet.on('session_proposal', async (proposal: any) => {
-        console.log('[WC] Session proposal received:', JSON.stringify(proposal.params?.requiredNamespaces));
-        const { id, params } = proposal;
-
-        // Support all EVM chains the dApp requests
-        const required = params.requiredNamespaces?.eip155 ?? {};
-        const optional = params.optionalNamespaces?.eip155 ?? {};
-        const chains = required.chains ?? optional.chains ?? ['eip155:137'];
-        const methods = [
-          ...(required.methods ?? []),
-          ...(optional.methods ?? []),
-          'eth_sendTransaction', 'personal_sign', 'eth_signTypedData_v4',
-          'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain',
-        ];
-        const events = [
-          ...(required.events ?? []),
-          ...(optional.events ?? []),
-          'chainChanged', 'accountsChanged',
-        ];
-
-        // Deduplicate
-        const uniqueMethods = [...new Set(methods)];
-        const uniqueEvents = [...new Set(events)];
-
-        const namespaces: any = {
-          eip155: {
-            chains,
-            accounts: chains.map((c: string) => `${c}:${address}`),
-            methods: uniqueMethods,
-            events: uniqueEvents,
-          },
-        };
-
-        console.log('[WC] Approving with namespaces:', JSON.stringify(namespaces));
-        try {
-          const session = await wallet.approveSession({ id, namespaces });
-          console.log('[WC] Session approved, topic:', session.topic);
-          setActiveTopic(session.topic);
-          setPeerName(session.peer?.metadata?.name ?? 'dApp');
-          setConnectState('connected');
-        } catch (err: any) {
-          console.error('[WC] Session approval failed:', err.message);
-          Alert.alert('Connection Failed', err.message ?? 'Session approval failed');
-          setConnectState('idle');
-        }
-      });
-
-      // Handle session requests
-      wallet.on('session_request', async (event: any) => {
-        const { id, topic, params } = event;
-        const { request } = params;
-        const method = request.method;
-        const reqParams = request.params ?? [];
-        const chainIdFromParams = params.chainId?.split(':')[1];
-        const cid = chainIdFromParams ? parseInt(chainIdFromParams) : currentChainId;
-
-        console.log('[WC] Request:', method, 'id:', id);
-
-        // Auto-reply read-only methods
-        if (method === 'wallet_switchEthereumChain') {
-          const cp = reqParams?.[0] as { chainId?: string } | undefined;
-          if (cp?.chainId) {
-            const nc = parseInt(cp.chainId, 16);
-            if (!isNaN(nc)) setCurrentChainId(nc);
-          }
-          await wallet.respondSessionRequest({ topic, response: { id, jsonrpc: '2.0', result: null } });
-          return;
-        }
-
-        const readOnly = await handleReadOnlyRPC(method, reqParams, address, cid);
-        if (readOnly.handled) {
-          await wallet.respondSessionRequest({ topic, response: { id, jsonrpc: '2.0', result: readOnly.result } });
-          return;
-        }
-
-        // Signing methods — show approval UI
-        if (isSigningMethod(method)) {
-          setIncomingRequest({
-            id: String(id),
-            method,
-            params: reqParams,
-            origin: peerName,
-          });
-        } else {
-          console.log('[WC] Unknown method, returning error:', method);
-          await wallet.respondSessionRequest({
-            topic,
-            response: { id, jsonrpc: '2.0', error: { code: -32601, message: `Method not supported: ${method}` } },
-          });
-        }
-      });
-
-      // Handle disconnect
-      wallet.on('session_delete', () => {
-        console.log('[WC] Session deleted');
-        setConnectState('idle');
-        setActiveTopic(null);
-        setPeerName('');
-        setIncomingRequest(null);
-      });
-
-      console.log('[WC] Pairing with URI...');
-      await wallet.pair({ uri: wcUri.trim() });
-      console.log('[WC] Pair request sent, waiting for proposal...');
-      setWeb3wallet(wallet);
-    } catch (err: any) {
-      console.error('[WC] Connection error:', err);
-      Alert.alert('Connection Failed', err.message ?? 'Could not connect');
-      setConnectState('idle');
-    }
-  }, [wcUri, address, currentChainId, peerName]);
-
-  const disconnect = useCallback(async () => {
-    if (web3wallet && activeTopic) {
+    ws.onmessage = (event) => {
       try {
-        await web3wallet.disconnectSession({ topic: activeTopic, reason: { code: 6000, message: 'User disconnected' } });
-      } catch { /* ignore */ }
-    }
+        const msg = JSON.parse(event.data);
+        handleMessage(msg);
+      } catch (err) {
+        console.error('[WS] Parse error:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('[WS] Disconnected');
+      wsRef.current = null;
+      if (connectState === 'connected') {
+        setConnectState('idle');
+      }
+      setIncomingRequest(null);
+    };
+
+    ws.onerror = () => {
+      // Connection refused — dApp browser not running
+      ws.close();
+      wsRef.current = null;
+      tryLaunchDppBrowser();
+    };
+
+    wsRef.current = ws;
+  }, [accountName, state.accounts]);
+
+  const disconnect = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
     setConnectState('idle');
-    setActiveTopic(null);
-    setPeerName('');
     setIncomingRequest(null);
-    setWeb3wallet(null);
-  }, [web3wallet, activeTopic]);
+  }, []);
+
+  // --- Try to launch dApp browser via custom protocol ---
+
+  const tryLaunchDppBrowser = useCallback(() => {
+    if (Platform.OS !== 'web') return;
+
+    // Try custom protocol to launch desktop app
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = DPP_PROTOCOL;
+    document.body.appendChild(iframe);
+
+    // If the app doesn't open within 2 seconds, show download link
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      setConnectState('not-installed');
+    }, 2000);
+  }, []);
+
+  // --- Handle incoming messages ---
+
+  const handleMessage = useCallback((msg: any) => {
+    // It's a request from dApp browser
+    if (msg.id && msg.method) {
+      const { id, method, params = [], origin = '' } = msg;
+      const addr = addressRef.current;
+      const cid = chainIdRef.current;
+
+      // Chain switch
+      if (method === 'wallet_switchEthereumChain') {
+        const cp = params?.[0] as { chainId?: string } | undefined;
+        if (cp?.chainId) {
+          const nc = parseInt(cp.chainId, 16);
+          if (!isNaN(nc)) { chainIdRef.current = nc; setCurrentChainId(nc); }
+        }
+        sendResponse(id, null);
+        return;
+      }
+
+      // Auto-reply read-only methods
+      handleReadOnlyRPC(method, params, addr, cid).then(result => {
+        if (result.handled) {
+          sendResponse(id, result.result);
+        } else if (isSigningMethod(method)) {
+          // Show approval UI
+          setIncomingRequest({ id, method, params, origin, favicon: undefined });
+        } else {
+          sendResponse(id, undefined, { code: -32601, message: `Not supported: ${method}` });
+        }
+      });
+    }
+  }, []);
+
+  const sendResponse = useCallback((id: string, result?: any, error?: { code: number; message: string }) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const msg: any = { id };
+    if (error) msg.error = error;
+    else msg.result = result ?? null;
+    ws.send(JSON.stringify(msg));
+  }, []);
+
+  // --- Approve / Reject ---
 
   const approveRequest = useCallback(async (request: BLEIncomingRequest) => {
-    if (!activeAccount || !web3wallet || !activeTopic) return;
+    if (!activeAccount) return;
     setIsSigning(true);
     setSignError(null);
 
     try {
       const result = await handleDAppRequest(
-        request,
-        activeAccount,
-        state.address,
-        currentChainId,
+        request, activeAccount, state.address, chainIdRef.current,
       );
-
-      await web3wallet.respondSessionRequest({
-        topic: activeTopic,
-        response: { id: parseInt(request.id), jsonrpc: '2.0', result },
-      });
+      sendResponse(request.id, result);
       setIncomingRequest(null);
     } catch (err: any) {
       if (err?.code === PasskeyErrorCode.CANCELLED) {
@@ -207,29 +178,34 @@ export default function WalletConnectScreen() {
         return;
       }
       setSignError(err.message ?? 'Signing failed');
-      try {
-        await web3wallet.respondSessionRequest({
-          topic: activeTopic,
-          response: { id: parseInt(request.id), jsonrpc: '2.0', error: { code: -32603, message: err.message } },
-        });
-      } catch { /* ignore */ }
+      sendResponse(request.id, undefined, { code: -32603, message: err.message });
       setIncomingRequest(null);
     } finally {
       setIsSigning(false);
     }
-  }, [activeAccount, state.address, currentChainId, web3wallet, activeTopic]);
+  }, [activeAccount, state.address, sendResponse]);
 
-  const rejectRequest = useCallback(async (request: BLEIncomingRequest) => {
-    if (web3wallet && activeTopic) {
-      try {
-        await web3wallet.respondSessionRequest({
-          topic: activeTopic,
-          response: { id: parseInt(request.id), jsonrpc: '2.0', error: { code: 4001, message: 'User rejected' } },
-        });
-      } catch { /* ignore */ }
-    }
+  const rejectRequest = useCallback((request: BLEIncomingRequest) => {
+    sendResponse(request.id, undefined, { code: 4001, message: 'User rejected' });
     setIncomingRequest(null);
-  }, [web3wallet, activeTopic]);
+  }, [sendResponse]);
+
+  // Update wallet info when account/chain changes
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'wallet_info',
+        address,
+        chainId: currentChainId,
+        name: accountName,
+        accounts: state.accounts.map(a => ({ name: a.name, address: a.address })),
+      }));
+    }
+  }, [address, accountName, currentChainId]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { wsRef.current?.close(); }, []);
 
   // --- Render ---
 
@@ -246,45 +222,57 @@ export default function WalletConnectScreen() {
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>WalletConnect</Text>
+        <Text style={styles.pageTitle}>dApps</Text>
 
-        {/* Wallet info */}
         <VelaCard style={styles.walletCard}>
           <Text style={styles.walletName}>{accountName}</Text>
           <Text style={styles.walletAddr}>{shortAddress(address)}</Text>
         </VelaCard>
 
+        {/* Idle — connect button */}
         {connectState === 'idle' && (
-          <View>
-            <Text style={styles.sectionTitle}>Connect to dApp</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Connect to dApp Browser</Text>
             <Text style={styles.hint}>
-              Paste a WalletConnect URI from any dApp to connect your wallet.
+              Connect to the local dApp Browser to interact with decentralized applications.
             </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="wc:a1b2c3..."
-              placeholderTextColor={VelaColor.textTertiary}
-              value={wcUri}
-              onChangeText={setWcUri}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <VelaButton
-              title="Connect"
-              onPress={connectWC}
-              disabled={!wcUri.trim()}
-            />
+            <VelaButton title="Connect" onPress={connect} />
           </View>
         )}
 
+        {/* Connecting */}
         {connectState === 'connecting' && (
           <View style={styles.centered}>
             <Text style={styles.statusText}>Connecting...</Text>
           </View>
         )}
 
+        {/* Not installed — show download */}
+        {connectState === 'not-installed' && (
+          <VelaCard style={styles.notInstalledCard}>
+            <Text style={styles.notInstalledTitle}>dApp Browser not found</Text>
+            <Text style={styles.notInstalledText}>
+              Install the dApp Browser desktop application to connect to dApps from your wallet.
+            </Text>
+            <VelaButton
+              title="Download dApp Browser"
+              onPress={() => {
+                if (Platform.OS === 'web') window.open(DPP_DOWNLOAD_URL, '_blank');
+                else Linking.openURL(DPP_DOWNLOAD_URL);
+              }}
+              variant="accent"
+              style={{ marginTop: 12 }}
+            />
+            <VelaButton
+              title="Try Again"
+              onPress={connect}
+              variant="secondary"
+              style={{ marginTop: 8 }}
+            />
+          </VelaCard>
+        )}
+
+        {/* Connected — no pending request */}
         {connectState === 'connected' && !incomingRequest && (
           <View>
             <VelaCard style={styles.connectedCard}>
@@ -292,8 +280,10 @@ export default function WalletConnectScreen() {
                 <View style={styles.connectedDot} />
                 <Text style={styles.connectedText}>Connected to {peerName}</Text>
               </View>
+              <Text style={styles.connectedHint}>
+                Open a dApp in the browser to get started. Signing requests will appear here.
+              </Text>
             </VelaCard>
-
             <VelaButton
               title="Disconnect"
               onPress={disconnect}
@@ -361,112 +351,31 @@ function methodLabel(method: string): string {
 }
 
 const styles = StyleSheet.create({
-  pageTitle: {
-    ...VelaFont.heading(28),
-    color: VelaColor.textPrimary,
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  walletCard: {
-    padding: VelaSpacing.cardPadding,
-    marginBottom: 24,
-  },
-  walletName: {
-    ...VelaFont.title(16),
-    color: VelaColor.textPrimary,
-  },
-  walletAddr: {
-    ...VelaFont.mono(13),
-    color: VelaColor.textSecondary,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    ...VelaFont.title(18),
-    color: VelaColor.textPrimary,
-    marginBottom: 8,
-  },
-  hint: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  input: {
-    ...VelaFont.mono(14),
-    color: VelaColor.textPrimary,
-    backgroundColor: VelaColor.bgWarm,
-    borderRadius: VelaRadius.cardSmall,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
-  },
-  centered: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    ...VelaFont.body(16),
-    color: VelaColor.textSecondary,
-    textAlign: 'center',
-  },
-  statusText: {
-    ...VelaFont.title(16),
-    color: VelaColor.blue,
-  },
-  connectedCard: {
-    padding: VelaSpacing.cardPadding,
-  },
-  connectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  connectedDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: VelaColor.green,
-  },
-  connectedText: {
-    ...VelaFont.title(16),
-    color: VelaColor.textPrimary,
-  },
-  requestCard: {
-    padding: VelaSpacing.cardPadding,
-    marginTop: 16,
-    gap: 12,
-  },
-  requestOrigin: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
-  },
-  requestMethod: {
-    ...VelaFont.heading(20),
-    color: VelaColor.textPrimary,
-  },
-  txDetails: {
-    gap: 8,
-    paddingVertical: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  detailLabel: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
-  },
-  detailValue: {
-    ...VelaFont.mono(14),
-    color: VelaColor.textPrimary,
-    maxWidth: '60%',
-  },
-  errorText: {
-    ...VelaFont.body(13),
-    color: VelaColor.accent,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
+  pageTitle: { ...VelaFont.heading(28), color: VelaColor.textPrimary, marginBottom: 20, marginTop: 8 },
+  walletCard: { padding: VelaSpacing.cardPadding, marginBottom: 24 },
+  walletName: { ...VelaFont.title(16), color: VelaColor.textPrimary },
+  walletAddr: { ...VelaFont.mono(13), color: VelaColor.textSecondary, marginTop: 4 },
+  section: { gap: 12 },
+  sectionTitle: { ...VelaFont.title(18), color: VelaColor.textPrimary },
+  hint: { ...VelaFont.body(14), color: VelaColor.textSecondary, lineHeight: 20 },
+  centered: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { ...VelaFont.body(16), color: VelaColor.textSecondary, textAlign: 'center' },
+  statusText: { ...VelaFont.title(16), color: VelaColor.blue },
+  connectedCard: { padding: VelaSpacing.cardPadding, gap: 8 },
+  connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  connectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: VelaColor.green },
+  connectedText: { ...VelaFont.title(16), color: VelaColor.textPrimary },
+  connectedHint: { ...VelaFont.body(13), color: VelaColor.textSecondary, lineHeight: 18 },
+  notInstalledCard: { padding: VelaSpacing.cardPadding, gap: 4 },
+  notInstalledTitle: { ...VelaFont.title(17), color: VelaColor.textPrimary },
+  notInstalledText: { ...VelaFont.body(14), color: VelaColor.textSecondary, lineHeight: 20 },
+  requestCard: { padding: VelaSpacing.cardPadding, gap: 12 },
+  requestOrigin: { ...VelaFont.body(13), color: VelaColor.textSecondary },
+  requestMethod: { ...VelaFont.heading(20), color: VelaColor.textPrimary },
+  txDetails: { gap: 8, paddingVertical: 4 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  detailLabel: { ...VelaFont.body(14), color: VelaColor.textSecondary },
+  detailValue: { ...VelaFont.mono(14), color: VelaColor.textPrimary, maxWidth: '60%' },
+  errorText: { ...VelaFont.body(13), color: VelaColor.accent },
+  buttonRow: { flexDirection: 'row', marginTop: 8 },
 });
