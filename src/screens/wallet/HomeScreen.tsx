@@ -19,6 +19,20 @@ function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Integer part including "$" sign, e.g. "$1,234" */
+function formatUsdInt(value: number): string {
+  const full = formatUsd(value);
+  const dot = full.indexOf('.');
+  return dot === -1 ? full : full.slice(0, dot);
+}
+
+/** Decimal part including dot, e.g. ".00" */
+function formatUsdDec(value: number): string {
+  const full = formatUsd(value);
+  const dot = full.indexOf('.');
+  return dot === -1 ? '.00' : full.slice(dot);
+}
+
 function TokenRow({ token, onPress }: { token: APIToken; onPress: () => void }) {
   const balance = tokenBalanceDouble(token);
   const usd = tokenUsdValue(token);
@@ -136,7 +150,10 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       {/* Total balance */}
-      <Text style={styles.totalBalance}>{formatUsd(totalUsd)}</Text>
+      <View style={styles.balanceRow}>
+        <Text style={styles.balanceInt}>{formatUsdInt(totalUsd)}</Text>
+        <Text style={styles.balanceDec}>{formatUsdDec(totalUsd)}</Text>
+      </View>
 
       {/* Action buttons */}
       <View style={styles.actionRow}>
@@ -197,42 +214,51 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   header: {
+    paddingTop: 20,
     marginBottom: 24,
   },
   accountRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   accountName: {
-    ...VelaFont.title(17),
+    ...VelaFont.title(18),
     color: VelaColor.textPrimary,
   },
   accountAddr: {
     ...VelaFont.mono(13),
-    color: VelaColor.textSecondary,
+    color: VelaColor.textTertiary,
+    marginTop: 3,
   },
-  totalBalance: {
-    ...VelaFont.heading(36),
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  balanceInt: {
+    ...VelaFont.heading(38),
     color: VelaColor.textPrimary,
-    marginBottom: 24,
+  },
+  balanceDec: {
+    ...VelaFont.heading(24),
+    color: VelaColor.textTertiary,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 32,
-    marginBottom: 8,
+    gap: 36,
+    marginBottom: 16,
   },
   actionBtn: {
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   actionIconBg: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: VelaColor.textPrimary,
+    backgroundColor: VelaColor.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
