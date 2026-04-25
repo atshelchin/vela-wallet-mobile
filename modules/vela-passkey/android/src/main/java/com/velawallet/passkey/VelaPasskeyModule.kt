@@ -1,6 +1,5 @@
 package com.velawallet.passkey
 
-import android.app.Activity
 import android.util.Base64
 import androidx.credentials.*
 import androidx.credentials.exceptions.*
@@ -10,15 +9,8 @@ import org.json.JSONObject
 import java.security.SecureRandom
 
 /**
- * Native module bridging Android Passkeys (Credential Manager) to React Native.
- *
- * All binary data crosses the bridge as lowercase hex strings.
- *
- * Error codes:
- *   - PASSKEY_CANCELLED      — user dismissed the dialog
- *   - PASSKEY_FAILED         — generic failure
- *   - PASSKEY_NO_CREDENTIAL  — no credential matched
- *   - PASSKEY_NOT_SUPPORTED  — device does not support passkeys
+ * Passkey native module for Android using Credential Manager.
+ * Requires androidx.credentials in the project's build.gradle.
  */
 class VelaPasskeyModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -36,15 +28,10 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
         scope.cancel()
     }
 
-    // MARK: - isSupported
-
     @ReactMethod
     fun isSupported(promise: Promise) {
-        // Credential Manager is available on Android 9+ with Google Play Services
         promise.resolve(true)
     }
-
-    // MARK: - register
 
     @ReactMethod
     fun register(userName: String, promise: Promise) {
@@ -85,12 +72,8 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 val responseObj = responseJson.getJSONObject("response")
 
                 val rawId = base64UrlDecode(responseJson.getString("rawId"))
-                val attestationObject = base64UrlDecode(
-                    responseObj.getString("attestationObject")
-                )
-                val clientDataJSON = base64UrlDecode(
-                    responseObj.getString("clientDataJSON")
-                )
+                val attestationObject = base64UrlDecode(responseObj.getString("attestationObject"))
+                val clientDataJSON = base64UrlDecode(responseObj.getString("clientDataJSON"))
 
                 val dict = Arguments.createMap().apply {
                     putString("credentialId", toHex(rawId))
@@ -102,14 +85,12 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: CreateCredentialCancellationException) {
                 promise.reject("PASSKEY_CANCELLED", "User cancelled registration", e)
             } catch (e: CreateCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Registration failed", e)
+                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
         }
     }
-
-    // MARK: - authenticate
 
     @ReactMethod
     fun authenticate(promise: Promise) {
@@ -132,27 +113,22 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 }
                 """.trimIndent()
 
-                val request = GetCredentialRequest(
-                    listOf(GetPublicKeyCredentialOption(json))
-                )
+                val request = GetCredentialRequest(listOf(GetPublicKeyCredentialOption(json)))
                 val credentialManager = CredentialManager.create(activity)
                 val result = credentialManager.getCredential(activity, request)
-
                 resolveAssertion(result, promise)
 
             } catch (e: GetCredentialCancellationException) {
-                promise.reject("PASSKEY_CANCELLED", "User cancelled authentication", e)
+                promise.reject("PASSKEY_CANCELLED", "User cancelled", e)
             } catch (e: NoCredentialException) {
-                promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found for this app", e)
+                promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Authentication failed", e)
+                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
         }
     }
-
-    // MARK: - sign
 
     @ReactMethod
     fun sign(challengeHex: String, credentialId: String?, promise: Promise) {
@@ -167,10 +143,6 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 val challengeBytes = fromHex(challengeHex)
                 val challengeB64 = base64UrlEncode(challengeBytes)
 
-                // Build the assertion request
-                // Note: Android Credential Manager does not support allowCredentials
-                // for filtering to a specific credential (unlike iOS).
-                // The OS will show the picker if multiple credentials exist.
                 val json = """
                 {
                     "challenge": "$challengeB64",
@@ -179,31 +151,26 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 }
                 """.trimIndent()
 
-                val request = GetCredentialRequest(
-                    listOf(GetPublicKeyCredentialOption(json))
-                )
+                val request = GetCredentialRequest(listOf(GetPublicKeyCredentialOption(json)))
                 val credentialManager = CredentialManager.create(activity)
                 val result = credentialManager.getCredential(activity, request)
-
                 resolveAssertion(result, promise)
 
             } catch (e: GetCredentialCancellationException) {
-                promise.reject("PASSKEY_CANCELLED", "User cancelled signing", e)
+                promise.reject("PASSKEY_CANCELLED", "User cancelled", e)
             } catch (e: NoCredentialException) {
                 promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Signing failed", e)
+                promise.reject("PASSKEY_FAILED", e.type + ": " + e.errorMessage, e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
         }
     }
 
-    // MARK: - Helpers
-
     private fun resolveAssertion(result: GetCredentialResponse, promise: Promise) {
-        val credential = result.credential as? PublicKeyCredential
-        if (credential == null) {
+        val credential = result.credential
+        if (credential !is PublicKeyCredential) {
             promise.reject("PASSKEY_NO_CREDENTIAL", "No public key credential returned")
             return
         }
@@ -212,13 +179,9 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
         val responseObj = responseJson.getJSONObject("response")
 
         val rawId = base64UrlDecode(responseJson.getString("rawId"))
-        val authenticatorData = base64UrlDecode(
-            responseObj.getString("authenticatorData")
-        )
+        val authenticatorData = base64UrlDecode(responseObj.getString("authenticatorData"))
         val signature = base64UrlDecode(responseObj.getString("signature"))
-        val clientDataJSON = base64UrlDecode(
-            responseObj.getString("clientDataJSON")
-        )
+        val clientDataJSON = base64UrlDecode(responseObj.getString("clientDataJSON"))
 
         val dict = Arguments.createMap().apply {
             putString("credentialId", toHex(rawId))
@@ -247,8 +210,6 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
         SecureRandom().nextBytes(bytes)
         return bytes
     }
-
-    // MARK: - Encoding helpers
 
     private fun base64UrlEncode(data: ByteArray): String =
         Base64.encodeToString(data, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)

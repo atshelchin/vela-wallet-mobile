@@ -277,9 +277,9 @@ function registerAndroidPackages(projectRoot) {
   ];
 
   const packageRegistrations = [
-    'packages.add(VelaBLEPackage())',
-    'packages.add(VelaPasskeyPackage())',
-    'packages.add(VelaCloudSyncPackage())',
+    'add(VelaBLEPackage())',
+    'add(VelaPasskeyPackage())',
+    'add(VelaCloudSyncPackage())',
   ];
 
   // Add imports (after the last existing import line)

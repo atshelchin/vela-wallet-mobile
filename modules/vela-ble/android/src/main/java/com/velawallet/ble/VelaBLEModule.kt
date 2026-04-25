@@ -563,8 +563,8 @@ class VelaBLEModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
                 ReadableType.Boolean -> json.put(array.getBoolean(i))
                 ReadableType.Number -> json.put(array.getDouble(i))
                 ReadableType.String -> json.put(array.getString(i))
-                ReadableType.Map -> json.put(readableMapToJSON(array.getMap(i)))
-                ReadableType.Array -> json.put(readableArrayToJSON(array.getArray(i)))
+                ReadableType.Map -> array.getMap(i)?.let { json.put(readableMapToJSON(it)) }
+                ReadableType.Array -> array.getArray(i)?.let { json.put(readableArrayToJSON(it)) }
             }
         }
         return json
@@ -576,8 +576,8 @@ class VelaBLEModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
             ReadableType.Boolean -> dynamic.asBoolean()
             ReadableType.Number -> dynamic.asDouble()
             ReadableType.String -> dynamic.asString()
-            ReadableType.Map -> readableMapToJSON(dynamic.asMap())
-            ReadableType.Array -> readableArrayToJSON(dynamic.asArray())
+            ReadableType.Map -> dynamic.asMap()?.let { readableMapToJSON(it) }
+            ReadableType.Array -> dynamic.asArray()?.let { readableArrayToJSON(it) }
         }
     }
 
