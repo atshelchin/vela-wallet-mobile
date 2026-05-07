@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -12,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { color, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import * as WebBrowser from 'expo-web-browser';
@@ -302,7 +301,7 @@ export default function HistoryScreen() {
 
 // MARK: - Styles
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -310,13 +309,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   navBack: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
     width: 60,
   },
   navTitle: {
-    fontSize: 18,
+    fontSize: text.xl,
     fontWeight: weight.bold,
     color: color.fg.base,
   },
@@ -329,7 +328,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   addressText: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.muted,
@@ -341,7 +340,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
@@ -354,7 +353,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase',
@@ -375,20 +374,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   txIconText: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: text['2xl'],
+    fontWeight: weight.bold,
   },
   txInfo: {
     flex: 1,
     gap: 2,
   },
   txType: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   txAddress: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
@@ -397,11 +396,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   txAmount: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
   },
   txTime: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
@@ -416,16 +415,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIcon: {
-    fontSize: 40,
+    fontSize: text['4xl'],
     marginBottom: 4,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: text['2xl'],
     fontWeight: weight.bold,
     color: color.fg.base,
   },
   emptyBody: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.regular,
     color: color.fg.muted,
     textAlign: 'center',
@@ -438,7 +437,7 @@ const styles = StyleSheet.create({
   },
   // Network selector
   networkLabel: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase',
@@ -465,18 +464,18 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   networkName: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.regular,
     color: color.fg.base,
     flex: 1,
   },
   networkNameSelected: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
   },
   networkCheck: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
-});
+}));

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  StyleSheet,
   Alert,
   TextInput,
 } from 'react-native';
@@ -14,7 +13,8 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { color, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
@@ -300,6 +300,7 @@ export default function SettingsScreen() {
 
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
+  const { levelIndex: currentScaleIndex, change: changeTextScale } = useTextScale();
 
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
@@ -351,6 +352,31 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
+        {/* Text Size */}
+        <SettingsSection title="Text Size">
+          <View style={styles.textScaleStepper}>
+            <TouchableOpacity
+              style={[styles.textScaleBtn, currentScaleIndex === 0 && styles.textScaleBtnDisabled]}
+              onPress={() => changeTextScale(-1)}
+              disabled={currentScaleIndex === 0}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.textScaleBtnText, currentScaleIndex === 0 && styles.textScaleBtnTextDisabled]}>A-</Text>
+            </TouchableOpacity>
+            <Text style={styles.textScaleCurrentLabel}>
+              {TEXT_SCALE_LEVELS[currentScaleIndex].label}
+            </Text>
+            <TouchableOpacity
+              style={[styles.textScaleBtn, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnDisabled]}
+              onPress={() => changeTextScale(1)}
+              disabled={currentScaleIndex === TEXT_SCALE_LEVELS.length - 1}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.textScaleBtnText, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnTextDisabled]}>A+</Text>
+            </TouchableOpacity>
+          </View>
+        </SettingsSection>
+
         {/* General Section */}
         <SettingsSection title="General">
           <SettingsRow
@@ -385,13 +411,13 @@ export default function SettingsScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   scrollContent: {
     paddingTop: 8,
     paddingBottom: 40,
   },
   screenTitle: {
-    fontSize: 17,
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.base,
     textAlign: 'center',
@@ -403,7 +429,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     letterSpacing: 1.5,
@@ -427,7 +453,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   settingsIconText: {
-    fontSize: 15,
+    fontSize: text.lg,
   },
   settingsRowContent: {
     flex: 1,
@@ -435,19 +461,19 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   settingsRowTitle: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   settingsRowSubtitle: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.subtle,
   },
   chevron: {
-    fontSize: 18,
+    fontSize: text.xl,
     color: color.fg.subtle,
-    fontWeight: '500',
+    fontWeight: weight.medium,
   },
   settingsRowDivider: {
     position: 'absolute',
@@ -471,14 +497,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logoutIcon: {
-    fontSize: 15,
+    fontSize: text.lg,
     color: color.accent.base,
-    fontWeight: '700',
+    fontWeight: weight.bold,
   },
   logoutText: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
+  },
+
+  // Text Scale Stepper
+  textScaleStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+  },
+  textScaleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: color.border.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.bg.base,
+  },
+  textScaleBtnDisabled: {
+    opacity: 0.3,
+  },
+  textScaleBtnText: {
+    fontSize: text.lg,
+    fontWeight: weight.bold,
+    color: color.fg.base,
+  },
+  textScaleBtnTextDisabled: {
+    color: color.fg.subtle,
+  },
+  textScaleCurrentLabel: {
+    fontSize: text.base,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
 
   // Modal
@@ -496,12 +557,12 @@ const styles = StyleSheet.create({
     borderBottomColor: color.border.base,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   modalClose: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
@@ -538,7 +599,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accountAvatarText: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
@@ -547,20 +608,20 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   accountName: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   accountAddress: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.subtle,
   },
   checkmark: {
-    fontSize: 20,
+    fontSize: text['2xl'],
     color: color.accent.base,
-    fontWeight: '700',
+    fontWeight: weight.bold,
   },
   accountActions: {
     marginTop: 16,
@@ -589,10 +650,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   languageFlag: {
-    fontSize: 24,
+    fontSize: text['3xl'],
   },
   languageName: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
@@ -600,9 +661,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   checkmarkAccent: {
-    fontSize: 20,
+    fontSize: text['2xl'],
     color: color.accent.base,
-    fontWeight: '700',
+    fontWeight: weight.bold,
   },
 
   // Network Editor
@@ -625,19 +686,19 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   networkName: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   networkChainId: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.subtle,
   },
   chevronSmall: {
-    fontSize: 16,
+    fontSize: text.lg,
     color: color.fg.subtle,
-    fontWeight: '500',
+    fontWeight: weight.medium,
   },
   chevronRotated: {
     transform: [{ rotate: '90deg' }],
@@ -657,13 +718,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   configLabel: {
-    fontSize: 11,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     letterSpacing: 1,
   },
   configInput: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.base,
@@ -671,4 +732,4 @@ const styles = StyleSheet.create({
     backgroundColor: color.bg.sunken,
     borderRadius: radius.md,
   },
-});
+}));

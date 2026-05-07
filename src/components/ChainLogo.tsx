@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
+import { weight, createStyles } from '@/constants/theme';
 
 interface Props {
   label: string;
@@ -16,12 +17,12 @@ export function ChainLogo({ label, color, bgColor, size = 32 }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
-    fontWeight: '700',
+    fontWeight: weight.bold,
   },
-});
+}));

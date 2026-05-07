@@ -8,13 +8,13 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
-  StyleSheet,
   Platform,
   Pressable,
   PanResponder,
   Animated,
   Dimensions,
 } from 'react-native';
+import { color, createStyles } from '@/constants/theme';
 
 interface Props {
   visible: boolean;
@@ -121,7 +121,7 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
       {/* Content sheet */}
       <div style={{
         position: 'relative',
-        backgroundColor: '#FAFAF8',
+        backgroundColor: color.bg.base,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         maxHeight: '92%',
@@ -141,10 +141,10 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
-  nativeRoot: { flex: 1, backgroundColor: '#FAFAF8' },
+const styles = createStyles(() => ({
+  nativeRoot: { flex: 1, backgroundColor: color.bg.base },
   nativeContent: { flex: 1 },
   handleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
-  handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: '#D1D1D1' },
+  handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: color.border.base },
   webContent: { flex: 1 },
-});
+}));

@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { color, text, weight, space, radius } from '@/constants/theme';
+import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
 
 interface Props {
   onCreateWallet: () => void;
@@ -45,10 +45,10 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   container: {
     flex: 1,
-    backgroundColor: '#1A1A18',
+    backgroundColor: color.fg.base,
   },
   safeArea: {
     flex: 1,
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 40,
     fontWeight: weight.bold,
-    color: '#FFFFFF',
+    color: color.fg.inverse,
     letterSpacing: 2,
   },
   logoAccent: {
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: text.base,
     fontWeight: weight.regular,
-    color: '#999',
+    color: color.fg.subtle,
     marginTop: space.lg,
     textAlign: 'center',
     lineHeight: 20,
@@ -89,22 +89,22 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: text.lg,
     fontWeight: weight.semibold,
-    color: '#FFFFFF',
+    color: color.fg.inverse,
   },
   secondaryBtn: {
     paddingVertical: space.xl,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryBtnText: {
     fontSize: text.lg,
     fontWeight: weight.semibold,
-    color: '#999',
+    color: color.fg.subtle,
   },
   buttonGap: {
     height: space.lg,
   },
-});
+}));

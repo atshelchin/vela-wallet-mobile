@@ -9,13 +9,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform,
+  Alert, Platform,
 } from 'react-native';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { AppModal } from '@/components/ui/AppModal';
-import { color, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
@@ -421,23 +421,23 @@ function methodLabel(m: string): string {
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   scrollContent: { paddingBottom: 40 },
-  pageTitle: { fontSize: 28, fontWeight: weight.bold, color: color.fg.base, marginTop: 16, marginBottom: 20 },
+  pageTitle: { fontSize: text['4xl'], fontWeight: weight.bold, color: color.fg.base, marginTop: 16, marginBottom: 20 },
 
   // Wallet card
   walletCard: { padding: space['2xl'], marginBottom: 20 },
   walletRow: { flexDirection: 'row', alignItems: 'center' },
-  walletName: { fontSize: 16, fontWeight: weight.semibold, color: color.fg.base },
-  walletAddr: { fontSize: 13, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
+  walletName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  walletAddr: { fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
 
   // Sections
   section: { marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: weight.semibold, color: color.fg.base, marginBottom: 6 },
-  hint: { fontSize: 14, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: 14 },
+  sectionTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base, marginBottom: 6 },
+  hint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: 14 },
   centered: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: 16, fontWeight: weight.regular, color: color.fg.muted },
-  statusText: { fontSize: 15, fontWeight: weight.semibold, color: color.info.base },
+  emptyText: { fontSize: text.lg, fontWeight: weight.regular, color: color.fg.muted },
+  statusText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.info.base },
   statusCard: { padding: space['2xl'] },
   pulseRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
@@ -445,32 +445,32 @@ const styles = StyleSheet.create({
   connectedCard: { padding: space['2xl'], gap: 6 },
   connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.success.base },
-  connectedText: { fontSize: 15, fontWeight: weight.semibold, color: color.fg.base },
-  connectedHint: { fontSize: 13, fontWeight: weight.regular, color: color.fg.muted },
+  connectedText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  connectedHint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
 
   // Not installed
   notInstalledCard: { padding: space['2xl'], gap: 4 },
-  notInstalledTitle: { fontSize: 17, fontWeight: weight.semibold, color: color.fg.base },
+  notInstalledTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base },
 
   // Request
   requestCard: { padding: space['2xl'], gap: 12 },
-  requestOrigin: { fontSize: 13, fontWeight: weight.regular, color: color.fg.muted },
-  requestMethod: { fontSize: 20, fontWeight: weight.bold, color: color.fg.base },
+  requestOrigin: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
+  requestMethod: { fontSize: text['2xl'], fontWeight: weight.bold, color: color.fg.base },
   txDetails: { gap: 8, paddingVertical: 4 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  detailLabel: { fontSize: 14, fontWeight: weight.regular, color: color.fg.muted },
-  detailValue: { fontSize: 14, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
-  errorText: { fontSize: 13, fontWeight: weight.regular, color: color.accent.base },
+  detailLabel: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
+  detailValue: { fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
+  errorText: { fontSize: text.base, fontWeight: weight.regular, color: color.accent.base },
   buttonRow: { flexDirection: 'row', marginTop: 8 },
 
   // Modal
   modalContainer: { flex: 1, padding: space['2xl'] },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: weight.semibold, color: color.fg.base },
-  modalClose: { fontSize: 16, fontWeight: weight.semibold, color: color.accent.base },
+  modalTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base },
+  modalClose: { fontSize: text.lg, fontWeight: weight.semibold, color: color.accent.base },
   modalScroll: { flex: 1 },
   accountItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: radius.md, marginBottom: 8, borderWidth: 1, borderColor: color.border.base },
   accountItemActive: { borderColor: color.accent.base, backgroundColor: color.accent.soft },
-  accountItemName: { fontSize: 15, fontWeight: weight.semibold, color: color.fg.base },
-  accountItemAddr: { fontSize: 12, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
-});
+  accountItemName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  accountItemAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
+}));

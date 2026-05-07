@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, weight, space } from '@/constants/theme';
+import { color, text, weight, space, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
 
@@ -142,7 +142,7 @@ function InfoRow({ label, value, copyable }: { label: string; value: string; cop
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   content: {
     paddingBottom: 100,
   },
@@ -153,12 +153,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backBtn: {
-    fontSize: 16, fontWeight: weight.semibold,
+    fontSize: text.lg, fontWeight: weight.semibold,
     color: color.accent.base,
     width: 50,
   },
   navTitle: {
-    fontSize: 17, fontWeight: weight.semibold,
+    fontSize: text.xl, fontWeight: weight.semibold,
     color: color.fg.base,
   },
   tokenHeader: {
@@ -167,11 +167,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tokenName: {
-    fontSize: 22, fontWeight: weight.bold,
+    fontSize: text['2xl'], fontWeight: weight.bold,
     color: color.fg.base,
   },
   chainLabel: {
-    fontSize: 14, fontWeight: weight.regular,
+    fontSize: text.base, fontWeight: weight.regular,
     color: color.fg.muted,
   },
   balanceCard: {
@@ -181,21 +181,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   balanceLabel: {
-    fontSize: 13, fontWeight: weight.semibold,
+    fontSize: text.base, fontWeight: weight.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   balanceValue: {
-    fontSize: 28, fontWeight: weight.bold,
+    fontSize: text['4xl'], fontWeight: weight.bold,
     color: color.fg.base,
   },
   usdValue: {
-    fontSize: 18, fontWeight: weight.semibold,
+    fontSize: text.xl, fontWeight: weight.semibold,
     color: color.fg.muted,
   },
   priceLabel: {
-    fontSize: 13, fontWeight: weight.regular,
+    fontSize: text.base, fontWeight: weight.regular,
     color: color.fg.subtle,
     marginTop: 4,
   },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   infoLabel: {
-    fontSize: 14, fontWeight: weight.regular,
+    fontSize: text.base, fontWeight: weight.regular,
     color: color.fg.muted,
   },
   infoValueRow: {
@@ -226,15 +226,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   infoValue: {
-    fontSize: 14, fontWeight: weight.semibold,
+    fontSize: text.base, fontWeight: weight.semibold,
     color: color.fg.base,
   },
   copyIcon: {
-    fontSize: 14,
+    fontSize: text.base,
     color: color.accent.base,
   },
   separator: {
     height: 1,
     backgroundColor: color.border.base,
   },
-});
+}));

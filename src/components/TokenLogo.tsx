@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { weight } from '@/constants/theme';
+import React, { useState } from 'react';
+import { View, Text, Image } from 'react-native';
+import { color, weight, createStyles } from '@/constants/theme';
 
 interface Props {
   symbol: string;
@@ -10,7 +10,6 @@ interface Props {
   textColor?: string;
 }
 
-// Generate a deterministic color from a string
 function stringToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -29,20 +28,7 @@ function stringToBgColor(str: string): string {
   return `hsl(${h}, 30%, 93%)`;
 }
 
-export function TokenLogo({ symbol, logoUrl, size = 40, bgColor, textColor }: Props) {
-  const bg = bgColor ?? stringToBgColor(symbol);
-  const fg = textColor ?? stringToColor(symbol);
-
-  if (logoUrl) {
-    return (
-      <Image
-        source={{ uri: logoUrl }}
-        style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
-        defaultSource={undefined}
-      />
-    );
-  }
-
+function LetterFallback({ symbol, size, bg, fg }: { symbol: string; size: number; bg: string; fg: string }) {
   return (
     <View style={[styles.fallback, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
       <Text style={[styles.label, { color: fg, fontSize: size * 0.42 }]}>
@@ -52,9 +38,27 @@ export function TokenLogo({ symbol, logoUrl, size = 40, bgColor, textColor }: Pr
   );
 }
 
-const styles = StyleSheet.create({
+export function TokenLogo({ symbol, logoUrl, size = 40, bgColor, textColor }: Props) {
+  const bg = bgColor ?? stringToBgColor(symbol);
+  const fg = textColor ?? stringToColor(symbol);
+  const [failed, setFailed] = useState(false);
+
+  if (!logoUrl || failed) {
+    return <LetterFallback symbol={symbol} size={size} bg={bg} fg={fg} />;
+  }
+
+  return (
+    <Image
+      source={{ uri: logoUrl }}
+      style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+const styles = createStyles(() => ({
   image: {
-    backgroundColor: '#F0F0F0',
+    backgroundColor: color.bg.sunken,
   },
   fallback: {
     alignItems: 'center',
@@ -63,4 +67,4 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: weight.bold,
   },
-});
+}));

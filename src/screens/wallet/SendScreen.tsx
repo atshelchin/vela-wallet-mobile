@@ -3,7 +3,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, weight, space, radius } from '@/constants/theme';
+import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
 import { chainName } from '@/models/network';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
@@ -14,7 +14,7 @@ import { findAccountByCredentialId } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 
@@ -241,14 +241,16 @@ export default function SendScreen() {
                 onPress={() => handleSelectToken(item)}
                 activeOpacity={0.7}
               >
-                <TokenLogo symbol={item.symbol} logoUrl={logo} size={40} />
+                <TokenLogo symbol={item.symbol} logoUrl={logo} size={32} />
                 <View style={styles.tokenInfo}>
-                  <Text style={styles.tokenName} numberOfLines={1}>{item.name || item.symbol}</Text>
+                  <Text style={styles.tokenName} numberOfLines={1}>{item.symbol}</Text>
                   <Text style={styles.tokenChain}>{chain}</Text>
                 </View>
                 <View style={styles.tokenValues}>
-                  <Text style={styles.tokenBalance}>{formatBalance(balance)} {item.symbol}</Text>
-                  {usd > 0 && <Text style={styles.tokenUsd}>{formatUsd(usd)}</Text>}
+                  <Text style={styles.tokenBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                    {formatBalance(balance)}
+                  </Text>
+                  {usd > 0 && <Text style={styles.tokenUsd} numberOfLines={1}>{formatUsd(usd)}</Text>}
                 </View>
               </TouchableOpacity>
             );
@@ -407,7 +409,7 @@ function ConfirmRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,7 +417,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   navBack: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
     width: 60,
@@ -437,13 +439,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepTitle: {
-    fontSize: 24,
+    fontSize: text['3xl'],
     fontWeight: weight.bold,
     color: color.fg.base,
     marginBottom: 20,
   },
   loadingText: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.regular,
     color: color.fg.muted,
     textAlign: 'center',
@@ -454,7 +456,7 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyText: {
-    fontSize: 17,
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.muted,
   },
@@ -462,35 +464,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: space.lg,
-    gap: 12,
+    paddingHorizontal: space.sm,
+    gap: space.lg,
   },
   tokenInfo: {
     flex: 1,
-    gap: 2,
+    gap: space.xs,
   },
   tokenName: {
-    fontSize: 15,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   tokenChain: {
-    fontSize: 13,
+    fontSize: text.xs,
     fontWeight: weight.regular,
-    color: color.fg.muted,
+    color: color.fg.subtle,
   },
   tokenValues: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: space.xs,
   },
   tokenBalance: {
-    fontSize: 15,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   tokenUsd: {
-    fontSize: 13,
+    fontSize: text.xs,
     fontWeight: weight.regular,
-    color: color.fg.muted,
+    color: color.fg.subtle,
   },
   selectedCard: {
     padding: space['2xl'],
@@ -502,18 +505,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectedName: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   selectedBalance: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.muted,
     marginBottom: 8,
@@ -536,7 +539,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   scanText: {
-    fontSize: 14,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
@@ -545,7 +548,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.regular,
     color: color.fg.base,
     marginBottom: 20,
@@ -566,12 +569,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   maxText: {
-    fontSize: 14,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
   usdPreview: {
-    fontSize: 14,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
     marginTop: -12,
@@ -592,12 +595,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmLabel: {
-    fontSize: 14,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
   confirmValue: {
-    fontSize: 14,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.base,
     maxWidth: '60%',
@@ -606,4 +609,4 @@ const styles = StyleSheet.create({
   confirmBtn: {
     marginTop: 8,
   },
-});
+}));

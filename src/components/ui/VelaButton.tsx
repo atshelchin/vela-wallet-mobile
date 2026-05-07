@@ -1,6 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, type ViewStyle } from 'react-native';
-import { color, text, weight, radius, space } from '@/constants/theme';
+import { TouchableOpacity, Text, ActivityIndicator, type ViewStyle } from 'react-native';
+import { color, text, weight, radius, space, createStyles } from '@/constants/theme';
 
 interface Props {
   title: string;
@@ -37,7 +37,7 @@ export function VelaButton({ title, onPress, variant = 'primary', disabled, load
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   button: {
     paddingVertical: space.xl,
     borderRadius: radius.xl,
@@ -51,4 +51,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-});
+}));

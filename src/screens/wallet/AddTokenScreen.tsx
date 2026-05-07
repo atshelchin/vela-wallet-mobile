@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
@@ -222,7 +222,7 @@ export default function AddTokenScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   content: {
     paddingBottom: 100,
   },
@@ -234,16 +234,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backBtn: {
-    fontSize: 16, fontWeight: weight.semibold,
+    fontSize: text.lg, fontWeight: weight.semibold,
     color: color.accent.base,
     width: 50,
   },
   navTitle: {
-    fontSize: 17, fontWeight: weight.semibold,
+    fontSize: text.xl, fontWeight: weight.semibold,
     color: color.fg.base,
   },
   fieldLabel: {
-    fontSize: 13, fontWeight: weight.semibold,
+    fontSize: text.base, fontWeight: weight.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -276,18 +276,18 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   chainChipText: {
-    fontSize: 13, fontWeight: weight.semibold,
+    fontSize: text.base, fontWeight: weight.semibold,
     color: color.fg.base,
   },
   chainChipTextSelected: {
-    color: '#FFFFFF',
+    color: color.fg.inverse,
   },
   input: {
     backgroundColor: color.bg.sunken,
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 14, fontWeight: weight.medium, fontFamily: font.mono,
+    fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono,
     color: color.fg.base,
   },
   fetchBtn: {
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   resultTitle: {
-    fontSize: 17, fontWeight: weight.semibold,
+    fontSize: text.xl, fontWeight: weight.semibold,
     color: color.success.base,
     marginBottom: 16,
   },
@@ -309,11 +309,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resultLabel: {
-    fontSize: 14, fontWeight: weight.regular,
+    fontSize: text.base, fontWeight: weight.regular,
     color: color.fg.muted,
   },
   resultValue: {
-    fontSize: 14, fontWeight: weight.semibold,
+    fontSize: text.base, fontWeight: weight.semibold,
     color: color.fg.base,
   },
   separator: {
@@ -323,4 +323,4 @@ const styles = StyleSheet.create({
   saveBtn: {
     marginTop: 20,
   },
-});
+}));

@@ -1,11 +1,12 @@
-import { Platform } from 'react-native';
+import { Platform, StyleSheet as RNStyleSheet } from 'react-native';
+import { getTextScaleFactor } from './text-scale';
 
 // =============================================================================
 // Design Tokens — single source of truth
 //
 // Naming follows Simple Design conventions:
 //   Spacing:    space.xs … space.3xl  (4px base)
-//   Typography: text.xs … text.3xl    (size) + weight.regular … weight.bold
+//   Typography: text.xs … text.3xl    (size, scaled) + weight.regular … weight.bold
 //   Radius:     radius.sm … radius.full
 //   Colors:     fg (foreground hierarchy), bg (background layers), accent, semantic
 // =============================================================================
@@ -28,19 +29,73 @@ export const space = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// 2. Typography — sizes, weights, line-heights
+// 2. Typography — sizes (scaled by user preference), weights, line-heights
 // ---------------------------------------------------------------------------
 
-export const text = {
-  'xs':  10,
-  'sm':  11,
-  'base': 13,
-  'lg':  15,
-  'xl':  17,
-  '2xl': 20,
-  '3xl': 26,
-  '4xl': 30,
-} as const;
+// Base sizes before scaling
+const TEXT_BASE = {
+  'xs':  9,
+  'sm':  10,
+  'base': 12,
+  'lg':  14,
+  'xl':  16,
+  '2xl': 18,
+  '3xl': 24,
+  '4xl': 28,
+};
+
+type TextKey = keyof typeof TEXT_BASE;
+const TEXT_KEYS = Object.keys(TEXT_BASE) as TextKey[];
+
+function buildTextScale(): Record<TextKey, number> {
+  const s = getTextScaleFactor();
+  const result = {} as Record<TextKey, number>;
+  for (const key of TEXT_KEYS) {
+    result[key] = Math.round(TEXT_BASE[key] * s);
+  }
+  return result;
+}
+
+/** Scaled text sizes — multiply base × user scale factor (loaded at app start) */
+export const text = buildTextScale();
+
+/** Style version — increments when text scale changes, invalidating createStyles caches. */
+let _styleVersion = 0;
+export function getStyleVersion() { return _styleVersion; }
+
+/** Rebuild text scale values. Call after loadTextScale() or when user changes scale. */
+export function rebuildTextScale(): void {
+  const s = getTextScaleFactor();
+  for (const key of TEXT_KEYS) {
+    text[key] = Math.round(TEXT_BASE[key] * s);
+  }
+  _styleVersion++;
+}
+
+/**
+ * Drop-in replacement for StyleSheet.create that re-evaluates when text scale changes.
+ *
+ * Usage: replace `const styles = StyleSheet.create({...})`
+ *   with: `const styles = createStyles(() => ({...}))`
+ *
+ * Component code stays the same — `styles.title` works as before.
+ */
+export function createStyles<T extends RNStyleSheet.NamedStyles<T>>(
+  factory: () => T | RNStyleSheet.NamedStyles<T>,
+): T {
+  let cache: T | null = null;
+  let ver = -1;
+
+  return new Proxy({} as T, {
+    get(_, prop: string | symbol) {
+      if (cache === null || ver !== _styleVersion) {
+        cache = RNStyleSheet.create(factory() as T);
+        ver = _styleVersion;
+      }
+      return (cache as any)[prop];
+    },
+  });
+}
 
 export const leading = {
   'none':   1,

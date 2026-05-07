@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
+import { View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { color, space } from '@/constants/theme';
+import { color, space, createStyles } from '@/constants/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -19,7 +19,7 @@ export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: color.bg.base,
@@ -28,4 +28,4 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: space['3xl'],
   },
-});
+}));

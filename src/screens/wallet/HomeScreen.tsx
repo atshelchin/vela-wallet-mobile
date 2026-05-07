@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert, AppState } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { loadCustomTokens } from '@/services/storage';
@@ -58,8 +58,10 @@ function TokenRow({ token, onPress }: { token: APIToken; onPress: () => void }) 
         <Text style={styles.tokenChain}>{chain}</Text>
       </View>
       <View style={styles.tokenValues}>
-        <Text style={styles.tokenBalance}>{formatBalance(balance)}</Text>
-        {usd > 0 && <Text style={styles.tokenUsd}>{formatUsd(usd)}</Text>}
+        <Text style={styles.tokenBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {formatBalance(balance)}
+        </Text>
+        {usd > 0 && <Text style={styles.tokenUsd} numberOfLines={1}>{formatUsd(usd)}</Text>}
       </View>
     </TouchableOpacity>
   );
@@ -244,7 +246,7 @@ function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: Rea
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   listContent: {
     paddingBottom: 100,
   },
@@ -374,4 +376,4 @@ const styles = StyleSheet.create({
     fontWeight: weight.regular,
     color: color.fg.subtle,
   },
-});
+}));

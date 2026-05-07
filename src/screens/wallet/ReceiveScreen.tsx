@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Share, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, ScrollView, Share, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, text, weight, space, radius, font } from '@/constants/theme';
+import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
@@ -180,7 +180,7 @@ export default function ReceiveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   content: {
     paddingBottom: 100,
   },
@@ -192,13 +192,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backBtn: {
-    fontSize: 16,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
     width: 50,
   },
   title: {
-    fontSize: 17,
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   addressLabel: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
@@ -230,11 +230,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   qrIcon: {
-    fontSize: 64,
+    fontSize: text['4xl'],
     color: color.fg.subtle,
   },
   qrHint: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.subtle,
   },
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   addressText: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.base,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   tapHint: {
-    fontSize: 12,
+    fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.subtle,
     marginTop: 8,
@@ -267,13 +267,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.base,
     marginBottom: 4,
   },
   sectionSubtitle: {
-    fontSize: 13,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
     marginBottom: 14,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   networkIconText: {
-    fontSize: 11,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
   },
   networkInfo: {
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   networkName: {
-    fontSize: 15,
+    fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
@@ -325,8 +325,8 @@ const styles = StyleSheet.create({
   },
   listeningRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginVertical: 12 },
   listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
-  listeningText: { fontSize: 14, fontWeight: weight.regular, color: color.success.base },
+  listeningText: { fontSize: text.base, fontWeight: weight.regular, color: color.success.base },
   depositAlert: { backgroundColor: color.success.soft, padding: 16, borderRadius: radius.md, marginVertical: 12, alignItems: 'center' },
-  depositText: { fontSize: 16, fontWeight: weight.semibold, color: color.success.base },
-  warning: { fontSize: 13, fontWeight: weight.regular, color: color.fg.subtle, textAlign: 'center', marginTop: 16, lineHeight: 18 },
-});
+  depositText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.success.base },
+  warning: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.subtle, textAlign: 'center', marginTop: 16, lineHeight: 18 },
+}));

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { color, text, weight, space, radius } from '@/constants/theme';
+import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useWallet } from '@/models/wallet-state';
@@ -280,7 +280,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,4 +377,4 @@ const styles = StyleSheet.create({
     color: color.fg.muted,
     lineHeight: 19,
   },
-});
+}));

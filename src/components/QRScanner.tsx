@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { color, weight, radius } from '@/constants/theme';
+import { color, text, weight, radius, createStyles } from '@/constants/theme';
 
 interface Props {
   visible: boolean;
@@ -90,7 +90,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
 const FRAME_SIZE = 250;
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -104,16 +104,16 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   closeButton: {
-    fontSize: 16, fontWeight: weight.semibold,
+    fontSize: text.lg, fontWeight: weight.semibold,
     color: color.accent.base,
     width: 60,
   },
   title: {
-    fontSize: 17, fontWeight: weight.semibold,
-    color: '#FFFFFF',
+    fontSize: text.xl, fontWeight: weight.semibold,
+    color: color.fg.inverse,
   },
   flipButton: {
-    fontSize: 16, fontWeight: weight.semibold,
+    fontSize: text.lg, fontWeight: weight.semibold,
     color: color.accent.base,
     width: 60,
     textAlign: 'right',
@@ -126,8 +126,8 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   permissionText: {
-    fontSize: 16, fontWeight: weight.regular,
-    color: '#CCCCCC',
+    fontSize: text.lg, fontWeight: weight.regular,
+    color: color.fg.subtle,
     textAlign: 'center',
   },
   permissionButton: {
@@ -137,8 +137,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
   },
   permissionButtonText: {
-    fontSize: 16, fontWeight: weight.semibold,
-    color: '#FFFFFF',
+    fontSize: text.lg, fontWeight: weight.semibold,
+    color: color.fg.inverse,
   },
   cameraContainer: {
     flex: 1,
@@ -178,11 +178,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   hint: {
-    fontSize: 14, fontWeight: weight.regular,
-    color: '#999999',
+    fontSize: text.base, fontWeight: weight.regular,
+    color: color.fg.subtle,
     textAlign: 'center',
     paddingHorizontal: 40,
     paddingVertical: 24,
     paddingBottom: 48,
   },
-});
+}));
