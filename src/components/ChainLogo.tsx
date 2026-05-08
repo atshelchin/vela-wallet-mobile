@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image } from 'react-native';
-import { weight, createStyles } from '@/constants/theme';
+import { inter, createStyles } from '@/constants/theme';
 
 interface Props {
   label: string;
@@ -40,6 +40,6 @@ const styles = createStyles(() => ({
     backgroundColor: 'transparent',
   },
   label: {
-    fontWeight: weight.bold,
+    ...inter.bold,
   },
 }));

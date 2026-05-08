@@ -126,6 +126,38 @@ export async function sendContractCall(
 }
 
 // ---------------------------------------------------------------------------
+// Gas Estimation (public)
+// ---------------------------------------------------------------------------
+
+/** Estimate the total gas fee in wei for a transaction. */
+export async function estimateTransactionFee(
+  from: string,
+  chainId: number,
+): Promise<{ totalWei: bigint; maxFeePerGas: bigint; totalGas: bigint }> {
+  const deployed = await isDeployed(from, chainId);
+  const { maxFee } = await getGasPrices(chainId);
+
+  const verificationGas = deployed
+    ? VERIFICATION_GAS_DEPLOYED
+    : VERIFICATION_GAS_UNDEPLOYED;
+
+  const totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+  const totalWei = totalGas * maxFee;
+
+  return { totalWei, maxFeePerGas: maxFee, totalGas };
+}
+
+/** Format wei to a human-readable ETH-like string. */
+export function formatWeiToEth(wei: bigint): string {
+  const eth = Number(wei) / 1e18;
+  if (eth === 0) return '0';
+  if (eth < 0.000001) return '< 0.000001';
+  if (eth < 0.001) return eth.toFixed(6);
+  if (eth < 1) return eth.toFixed(4);
+  return eth.toFixed(3);
+}
+
+// ---------------------------------------------------------------------------
 // Core UserOp Flow
 // ---------------------------------------------------------------------------
 

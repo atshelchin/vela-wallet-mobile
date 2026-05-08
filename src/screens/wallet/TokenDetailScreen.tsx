@@ -8,7 +8,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, weight, space, radius, shadow, font, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, shadow, font, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
 import { Copy, ArrowLeft } from 'lucide-react-native';
@@ -169,7 +169,7 @@ const styles = createStyles(() => ({
   },
   navTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   navSpacer: { minWidth: 50 },
@@ -182,7 +182,7 @@ const styles = createStyles(() => ({
   },
   tokenName: {
     fontSize: text['2xl'],
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   chainBadge: {
@@ -193,7 +193,7 @@ const styles = createStyles(() => ({
   },
   chainBadgeText: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.fg.muted,
   },
 
@@ -206,25 +206,25 @@ const styles = createStyles(() => ({
   },
   balanceLabel: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   balanceValue: {
     fontSize: text['4xl'],
-    fontWeight: weight.bold,
+    ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
   },
   usdValue: {
     fontSize: text.xl,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
   },
   priceLabel: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
     marginTop: space.xs,
   },
@@ -257,7 +257,7 @@ const styles = createStyles(() => ({
   },
   infoLabel: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
   infoValueRow: {
@@ -267,7 +267,7 @@ const styles = createStyles(() => ({
   },
   infoValue: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   separator: {

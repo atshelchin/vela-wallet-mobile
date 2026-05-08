@@ -11,13 +11,18 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as CloudSync from '@/modules/cloud-sync';
-import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig } from '@/models/types';
+import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork } from '@/models/types';
+import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 
 const KEYS = {
   accounts: 'vela.accounts',
   pendingUploads: 'vela.pendingUploads',
   customTokens: 'vela.customTokens',
   networkConfig: 'vela.networkConfig',
+  serviceEndpoints: 'vela.serviceEndpoints',
+  transactionHistory: 'vela.transactionHistory',
+  priceSource: 'vela.priceSource',
+  customNetworks: 'vela.customNetworks',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -178,6 +183,92 @@ export async function loadNetworkConfigs(): Promise<NetworkConfig[]> {
 export async function getNetworkConfig(chainId: number): Promise<NetworkConfig | undefined> {
   const configs = await loadNetworkConfigs();
   return configs.find(c => c.chainId === chainId);
+}
+
+// ---------------------------------------------------------------------------
+// Custom Networks
+// ---------------------------------------------------------------------------
+
+export async function saveCustomNetwork(network: CustomNetwork): Promise<void> {
+  const networks = await loadCustomNetworks();
+  const filtered = networks.filter(n => n.id !== network.id);
+  filtered.push(network);
+  await saveArray(KEYS.customNetworks, filtered);
+}
+
+export async function loadCustomNetworks(): Promise<CustomNetwork[]> {
+  return loadArray<CustomNetwork>(KEYS.customNetworks);
+}
+
+export async function removeCustomNetwork(id: string): Promise<void> {
+  const networks = await loadCustomNetworks();
+  await saveArray(KEYS.customNetworks, networks.filter(n => n.id !== id));
+}
+
+// ---------------------------------------------------------------------------
+// Service Endpoints
+// ---------------------------------------------------------------------------
+
+export async function loadServiceEndpoints(): Promise<ServiceEndpoints> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.serviceEndpoints);
+    if (raw) return { ...DEFAULT_SERVICE_ENDPOINTS, ...JSON.parse(raw) };
+  } catch {}
+  return { ...DEFAULT_SERVICE_ENDPOINTS };
+}
+
+export async function saveServiceEndpoints(endpoints: ServiceEndpoints): Promise<void> {
+  await AsyncStorage.setItem(KEYS.serviceEndpoints, JSON.stringify(endpoints));
+}
+
+// ---------------------------------------------------------------------------
+// Price Source
+// ---------------------------------------------------------------------------
+
+export async function loadPriceSource(): Promise<PriceSource> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.priceSource);
+    if (raw === 'dex') return 'dex';
+  } catch {}
+  return 'api';
+}
+
+export async function savePriceSource(source: PriceSource): Promise<void> {
+  await AsyncStorage.setItem(KEYS.priceSource, source);
+}
+
+// ---------------------------------------------------------------------------
+// Transaction History (local recording)
+// ---------------------------------------------------------------------------
+
+export interface LocalTransaction {
+  id: string;
+  userOpHash: string;
+  txHash: string;
+  from: string;
+  to: string;
+  value: string;
+  symbol: string;
+  decimals: number;
+  chainId: number;
+  timestamp: number;
+  status: 'confirmed' | 'failed';
+}
+
+export async function saveTransaction(tx: LocalTransaction): Promise<void> {
+  const txs = await loadTransactions();
+  txs.unshift(tx); // newest first
+  // Keep max 200 transactions
+  if (txs.length > 200) txs.length = 200;
+  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+}
+
+export async function loadTransactions(): Promise<LocalTransaction[]> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.transactionHistory);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
 }
 
 // ---------------------------------------------------------------------------

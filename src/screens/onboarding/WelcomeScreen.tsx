@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { fadeIn, fadeInUp } from '@/constants/entering';
-import { color, text, weight, space, radius, motion, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, motion, createStyles } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -101,7 +101,7 @@ const styles = createStyles(() => ({
   },
   logo: {
     fontSize: 48,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.inverse,
     letterSpacing: 3,
   },
@@ -110,7 +110,7 @@ const styles = createStyles(() => ({
   },
   tagline: {
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: 'rgba(255,255,255,0.45)',
     marginTop: space.xl,
     textAlign: 'center',
@@ -129,7 +129,7 @@ const styles = createStyles(() => ({
   },
   primaryBtnText: {
     fontSize: text.lg,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.inverse,
     letterSpacing: 0.3,
   },
@@ -143,7 +143,7 @@ const styles = createStyles(() => ({
   },
   secondaryBtnText: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: 'rgba(255,255,255,0.5)',
   },
 }));

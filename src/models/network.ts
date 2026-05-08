@@ -71,11 +71,20 @@ export const DEFAULT_NETWORKS: Network[] = [
     rpcURL: 'https://api.avax.network/ext/bc/C/rpc', explorerURL: 'https://snowtrace.io',
     bundlerURL: 'https://api.pimlico.io/v2/43114/rpc',
   },
+  {
+    id: 'gnosis', displayName: 'Gnosis', chainId: 100,
+    iconLabel: 'xDAI', iconColor: '#04795B', iconBg: '#E8F5F0',
+    logoURL: `${CHAIN_LOGO_BASE}/100/logo.png`, isL2: false,
+    rpcURL: 'https://rpc.gnosischain.com', explorerURL: 'https://gnosisscan.io',
+    bundlerURL: 'https://api.pimlico.io/v2/100/rpc',
+  },
 ];
 
 /** Lookup chain display name by ID. */
 export function chainName(chainId: number): string {
-  return DEFAULT_NETWORKS.find(n => n.chainId === chainId)?.displayName ?? `Chain ${chainId}`;
+  return DEFAULT_NETWORKS.find(n => n.chainId === chainId)?.displayName
+    ?? _customNetworkCache.find(n => n.chainId === chainId)?.displayName
+    ?? `Chain ${chainId}`;
 }
 
 /** Lookup native token symbol by chain ID. */
@@ -85,7 +94,11 @@ export function nativeSymbol(chainId: number): string {
     case 56: return 'BNB';
     case 137: return 'POL';
     case 43114: return 'AVAX';
-    default: return 'ETH';
+    case 100: return 'xDAI';
+    default: {
+      const custom = _customNetworkCache.find(n => n.chainId === chainId);
+      return custom?.nativeSymbol ?? 'ETH';
+    }
   }
 }
 
@@ -99,6 +112,45 @@ export function networkId(chainId: number): string {
     case 10: return 'opt-mainnet';
     case 8453: return 'base-mainnet';
     case 43114: return 'avax-mainnet';
-    default: return 'eth-mainnet';
+    case 100: return 'gnosis-mainnet';
+    default: return `chain-${chainId}`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Custom network support
+// ---------------------------------------------------------------------------
+
+import type { CustomNetwork } from '@/models/types';
+import { loadCustomNetworks } from '@/services/storage';
+
+/** In-memory cache of custom networks for synchronous lookups. */
+let _customNetworkCache: CustomNetwork[] = [];
+
+/** Refresh the custom network cache from storage. Call on app start and after adding/removing. */
+export async function refreshCustomNetworks(): Promise<void> {
+  _customNetworkCache = await loadCustomNetworks();
+}
+
+/** Convert a CustomNetwork to the Network interface. */
+export function customToNetwork(cn: CustomNetwork): Network {
+  return {
+    id: cn.id,
+    displayName: cn.displayName,
+    chainId: cn.chainId,
+    iconLabel: cn.iconLabel,
+    iconColor: cn.iconColor,
+    iconBg: cn.iconBg,
+    logoURL: cn.logoURL,
+    isL2: cn.isL2,
+    rpcURL: cn.rpcURL,
+    explorerURL: cn.explorerURL,
+    bundlerURL: cn.bundlerURL,
+  };
+}
+
+/** Get all networks: default + custom. */
+export async function getAllNetworks(): Promise<Network[]> {
+  await refreshCustomNetworks();
+  return [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
 }

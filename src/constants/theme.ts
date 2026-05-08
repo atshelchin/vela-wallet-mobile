@@ -139,27 +139,58 @@ export const weight = {
 };
 
 /**
- * Font zones — each zone serves a distinct purpose:
+ * Shorthand for applying Inter with the correct weight file.
+ *
+ * On Android, fontWeight is ignored when fontFamily is set —
+ * you must reference the weight-specific font file directly.
+ *
+ * Usage: `style={{ ...inter.semibold, fontSize: text.lg }}`
+ */
+export const inter = {
+  regular:  { fontFamily: 'Inter-Regular',  fontWeight: weight.regular  },
+  medium:   { fontFamily: 'Inter-Medium',   fontWeight: weight.medium   },
+  semibold: { fontFamily: 'Inter-SemiBold', fontWeight: weight.semibold },
+  bold:     { fontFamily: 'Inter-Bold',     fontWeight: weight.bold     },
+} as const;
+
+/**
+ * Font zones — bundled Inter font ensures identical rendering on iOS and Android.
  *
  *   sans:    Primary UI text — labels, buttons, body copy.
- *            Uses the platform system font for best readability and native feel.
- *
  *   display: Large headings & hero numbers (balance, token name on detail).
- *            On iOS uses SF Rounded for a softer, premium feel;
- *            on Android falls back to system sans.
+ *   mono:    Addresses, hashes, technical values. Keeps platform monospace
+ *            because Inter has no mono variant.
+ *   numeric: Balance/USD columns. Inter has excellent tabular figures built-in.
  *
- *   mono:    Addresses, hashes, technical values.
- *            Fixed-width ensures alignment and signals "machine-readable data".
- *
- *   numeric: Tabular numbers in lists (token balances, USD values).
- *            Uses tabular-nums feature on iOS for column-aligned figures.
+ * Weight mapping (React Native requires separate font files per weight):
+ *   400 → Inter-Regular
+ *   500 → Inter-Medium
+ *   600 → Inter-SemiBold
+ *   700 → Inter-Bold
  */
 export const font = {
-  sans: Platform.select({ ios: 'System', default: 'normal' }),
-  display: Platform.select({ ios: 'ui-rounded', default: 'normal' }),
-  mono: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-  numeric: Platform.select({ ios: 'System', default: 'normal' }),
+  sans:    'Inter-Regular',
+  display: 'Inter-Bold',
+  mono:    Platform.select({ ios: 'Menlo', default: 'monospace' }),
+  numeric: 'Inter-Regular',
 };
+
+/**
+ * Map fontWeight to the correct Inter font file.
+ * Use this when you need both fontFamily and fontWeight on the same Text:
+ *   style={{ fontFamily: interWeight('600'), fontWeight: '600' }}
+ *
+ * React Native Android ignores fontWeight when a custom fontFamily is set —
+ * you must point to the correct file.
+ */
+export function interWeight(w: '400' | '500' | '600' | '700'): string {
+  switch (w) {
+    case '400': return 'Inter-Regular';
+    case '500': return 'Inter-Medium';
+    case '600': return 'Inter-SemiBold';
+    case '700': return 'Inter-Bold';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 3. Border Radius

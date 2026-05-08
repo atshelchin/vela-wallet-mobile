@@ -3,7 +3,7 @@ import { View, Text, TextInput, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -18,8 +18,9 @@ import { uploadPublicKey } from '@/services/public-key-upload';
 import { verifySafeWebAuthn } from '@/services/webauthn-verify';
 import type { StoredAccount } from '@/models/types';
 import {
-  ArrowLeft, CheckCircle2, AlertTriangle, Loader,
+  ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check,
 } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -33,6 +34,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
   const [uploadFailed, setUploadFailed] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [created, setCreated] = useState(false);
+  const [addressCopied, setAddressCopied] = useState(false);
   const pendingRef = useRef<{
     account: StoredAccount;
     credentialId: string;
@@ -48,7 +50,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
     name: string;
   }): Promise<boolean> {
     try {
-      setStatus('Saving public key...');
+      setStatus('Setting up recovery...');
       await uploadPublicKey(params);
       return true;
     } catch (err) {
@@ -68,12 +70,12 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
     try {
       const supported = await Passkey.isSupported();
       if (!supported) {
-        Alert.alert('Not Supported', 'Passkeys are not supported on this device.');
+        Alert.alert('Not Supported', 'Biometric authentication is not available on this device.');
         setLoading(false);
         return;
       }
 
-      setStatus('Creating passkey...');
+      setStatus('Setting up secure identity...');
       const registration = await Passkey.register(trimmed);
 
       setStatus('Extracting public key...');
@@ -121,7 +123,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        setStatus('Passkey creation was cancelled.');
+        setStatus('Setup was cancelled.');
       } else {
         Alert.alert('Error', error instanceof Error ? error.message : String(error));
       }
@@ -152,7 +154,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
     const pending = pendingRef.current;
     if (!pending || loading) return;
     setLoading(true);
-    setStatus('Verifying passkey...');
+    setStatus('Verifying identity...');
 
     try {
       const testChallenge = toHex(new TextEncoder().encode('vela-verify-' + Date.now()));
@@ -162,7 +164,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       if (!compat.ok) {
         Alert.alert(
           'Device Not Compatible',
-          'Your passkey provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.',
+          'Your device\'s identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.',
         );
         setLoading(false);
         setStatus('');
@@ -193,7 +195,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
           </Pressable>
         )}
         <Text style={styles.title}>
-          {created ? 'Wallet Created' : uploadFailed ? 'Save Public Key' : 'Create Wallet'}
+          {created ? 'Wallet Created' : uploadFailed ? 'Recovery Setup' : 'Create Wallet'}
         </Text>
         {onBack && !uploadFailed && <View style={styles.headerSpacer} />}
       </View>
@@ -206,7 +208,32 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
             </View>
             <Text style={styles.successTitle}>Your wallet is ready!</Text>
             <Text style={styles.successMessage}>
-              Please sign in to verify your passkey works correctly before using your wallet.
+              Your address works on all 7 supported networks.
+            </Text>
+
+            {/* Address display */}
+            {pendingRef.current?.account.address && (
+              <Pressable
+                style={styles.addressBox}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(pendingRef.current!.account.address);
+                  setAddressCopied(true);
+                  setTimeout(() => setAddressCopied(false), 2000);
+                }}
+              >
+                <Text style={styles.addressText} numberOfLines={1} ellipsizeMode="middle">
+                  {pendingRef.current.account.address}
+                </Text>
+                {addressCopied ? (
+                  <Check size={14} color={color.success.base} strokeWidth={2.5} />
+                ) : (
+                  <Copy size={14} color={color.fg.subtle} strokeWidth={2} />
+                )}
+              </Pressable>
+            )}
+
+            <Text style={styles.verifyHint}>
+              Tap below to verify your identity works before using the wallet.
             </Text>
           </Animated.View>
         ) : uploadFailed ? (
@@ -214,10 +241,10 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
             <View style={styles.stateIconWrapError}>
               <AlertTriangle size={32} color={color.accent.base} strokeWidth={2} />
             </View>
-            <Text style={styles.errorTitle}>Public key upload failed</Text>
+            <Text style={styles.errorTitle}>Recovery setup failed</Text>
             <Text style={styles.errorMessage}>
-              Your passkey was created successfully, but the public key could not be saved to the
-              cloud server. Without this, you won't be able to recover your wallet on another device.
+              Your wallet was created successfully, but the recovery key could not be saved to the
+              server. Without this, you won't be able to recover your wallet on another device.
             </Text>
             {uploadError ? (
               <VelaCard style={styles.errorDetail}>
@@ -271,7 +298,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
           />
         ) : (
           <VelaButton
-            title="Create with Passkey"
+            title="Create Wallet"
             onPress={handleCreate}
             disabled={!name.trim() || loading}
             loading={loading}
@@ -302,7 +329,7 @@ const styles = createStyles(() => ({
   },
   title: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   content: {
@@ -311,7 +338,7 @@ const styles = createStyles(() => ({
   },
   label: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
     marginBottom: space.md,
     textTransform: 'uppercase',
@@ -319,7 +346,7 @@ const styles = createStyles(() => ({
   },
   input: {
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.base,
     backgroundColor: color.bg.raised,
     borderWidth: 1,
@@ -330,7 +357,7 @@ const styles = createStyles(() => ({
   },
   hint: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
     marginTop: space.lg,
     lineHeight: 18,
@@ -344,7 +371,7 @@ const styles = createStyles(() => ({
   },
   status: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.info.base,
   },
   bottom: {
@@ -376,24 +403,24 @@ const styles = createStyles(() => ({
   },
   successTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.success.base,
   },
   successMessage: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
     lineHeight: 20,
     textAlign: 'center',
   },
   errorTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.accent.base,
   },
   errorMessage: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
     lineHeight: 20,
     textAlign: 'center',
@@ -404,7 +431,34 @@ const styles = createStyles(() => ({
   },
   errorDetailText: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.accent.base,
+  },
+
+  // Wallet ready address
+  addressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+    width: '100%',
+  },
+  addressText: {
+    flex: 1,
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.base,
+    fontFamily: 'monospace',
+  },
+  verifyHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: space.sm,
   },
 }));

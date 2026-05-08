@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image } from 'react-native';
-import { color, weight, createStyles } from '@/constants/theme';
+import { color, inter, createStyles } from '@/constants/theme';
 
 interface Props {
   symbol: string;
@@ -65,6 +65,6 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
   },
   label: {
-    fontWeight: weight.bold,
+    ...inter.bold,
   },
 }));

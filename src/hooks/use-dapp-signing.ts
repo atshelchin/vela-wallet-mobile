@@ -95,7 +95,7 @@ export async function handleSendTransaction(
     const compat = verifySafeWebAuthn(assertion);
     if (!compat.ok) {
       throw new Error(
-        'Your passkey provider is not compatible with Vela Wallet. ' +
+        'Your device\'s identity provider is not compatible with Vela Wallet. ' +
         'Please switch to Google Password Manager.\n\n' + compat.reason,
       );
     }

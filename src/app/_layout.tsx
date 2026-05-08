@@ -8,6 +8,7 @@ import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
 import { color, rebuildTextScale } from '@/constants/theme';
+import { refreshCustomNetworks } from '@/models/network';
 
 function AppShell() {
   const colorScheme = useColorScheme();
@@ -23,6 +24,7 @@ function AppShell() {
           <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
           <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
           <Stack.Screen name="history" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="about" options={{ presentation: 'modal' }} />
         </Stack>
       </ThemeProvider>
     </WalletProvider>
@@ -33,10 +35,10 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    loadTextScale().then(() => {
-      rebuildTextScale();
-      setReady(true);
-    });
+    Promise.all([
+      loadTextScale().then(() => rebuildTextScale()),
+      refreshCustomNetworks(),
+    ]).then(() => setReady(true));
 
     hasPendingUploads().then((has) => {
       if (has) {

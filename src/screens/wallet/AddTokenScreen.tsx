@@ -6,7 +6,7 @@ import { fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
@@ -247,13 +247,13 @@ const styles = createStyles(() => ({
   },
   navTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   navSpacer: { minWidth: 50 },
   fieldLabel: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -287,7 +287,7 @@ const styles = createStyles(() => ({
   },
   chainChipText: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   chainChipTextSelected: {
@@ -299,7 +299,7 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.xl,
     paddingVertical: space.xl,
     fontSize: text.base,
-    fontWeight: weight.medium,
+    ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.base,
     borderWidth: 1,
@@ -320,7 +320,7 @@ const styles = createStyles(() => ({
   },
   resultTitle: {
     fontSize: text.lg,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.success.base,
   },
   resultRow: {
@@ -331,12 +331,12 @@ const styles = createStyles(() => ({
   },
   resultLabel: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
   resultValue: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   separator: {

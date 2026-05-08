@@ -14,7 +14,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, weight, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
@@ -23,8 +23,11 @@ import { tokenUsdValue } from '@/models/types';
 import * as Haptics from 'expo-haptics';
 import { Copy, Share2, Check, ArrowLeft } from 'lucide-react-native';
 
-const DEPOSIT_CHECK_MS = 5 * 60 * 1000;
-const MAX_DEPOSIT_CHECKS = 3;
+// Aggressive polling: 15s for first 2 min, then 60s for next 3 min, then stop
+const FAST_INTERVAL_MS = 15_000;
+const SLOW_INTERVAL_MS = 60_000;
+const FAST_PHASE_MS = 2 * 60_000;
+const TOTAL_LISTEN_MS = 5 * 60_000;
 
 function PulsingDot() {
   const opacity = useSharedValue(1);
@@ -59,41 +62,43 @@ export default function ReceiveScreen() {
   const [depositDetected, setDepositDetected] = useState(false);
   const [copied, setCopied] = useState(false);
   const previousBalance = useRef<number | null>(null);
-  const checkCount = useRef(0);
 
-  // Deposit detection polling
+  // Deposit detection polling — fast at first, then slower
   useEffect(() => {
     if (!address) return;
     setIsListening(true);
     previousBalance.current = null;
-    checkCount.current = 0;
+    const startTime = Date.now();
+    let timerId: ReturnType<typeof setTimeout>;
 
     const checkDeposit = async () => {
       if (AppState.currentState !== 'active') return;
       try {
-        const tokens = await fetchTokens(address);
+        const tokens = await fetchTokens(address, { forceRefresh: true });
         const total = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
         if (previousBalance.current !== null && total > previousBalance.current) {
           setDepositDetected(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => setDepositDetected(false), 5000);
+          setIsListening(false);
+          return; // Stop polling after detection
         }
         previousBalance.current = total;
       } catch {}
-    };
 
-    checkDeposit();
-    const timer = setInterval(() => {
-      checkCount.current += 1;
-      if (checkCount.current > MAX_DEPOSIT_CHECKS) {
-        clearInterval(timer);
+      // Schedule next check
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= TOTAL_LISTEN_MS) {
         setIsListening(false);
         return;
       }
-      checkDeposit();
-    }, DEPOSIT_CHECK_MS);
-    return () => { clearInterval(timer); setIsListening(false); };
+      const interval = elapsed < FAST_PHASE_MS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
+      timerId = setTimeout(checkDeposit, interval);
+    };
+
+    checkDeposit();
+    return () => { clearTimeout(timerId); setIsListening(false); };
   }, [address]);
 
   const copyAddress = async () => {
@@ -231,7 +236,7 @@ const styles = createStyles(() => ({
   },
   title: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   headerSpacer: { minWidth: 50 },
@@ -272,7 +277,7 @@ const styles = createStyles(() => ({
   },
   addressText: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.base,
     textAlign: 'center',
@@ -294,7 +299,7 @@ const styles = createStyles(() => ({
   },
   listeningText: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.success.base,
   },
 
@@ -311,7 +316,7 @@ const styles = createStyles(() => ({
   },
   depositText: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.success.base,
   },
 
@@ -328,13 +333,13 @@ const styles = createStyles(() => ({
   // Networks
   sectionTitle: {
     fontSize: text.lg,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
     marginBottom: space.sm,
   },
   sectionSubtitle: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
     marginBottom: space.xl,
   },
@@ -350,7 +355,7 @@ const styles = createStyles(() => ({
   },
   networkName: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
     flex: 1,
   },
@@ -362,7 +367,7 @@ const styles = createStyles(() => ({
   },
   networkBadgeText: {
     fontSize: text.xs,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.info.base,
   },
   separator: {

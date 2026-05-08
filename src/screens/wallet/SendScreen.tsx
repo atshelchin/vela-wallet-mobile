@@ -4,14 +4,14 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenRow } from '@/components/ui/TokenRow';
-import { color, text, weight, space, radius, shadow, motion, createStyles } from '@/constants/theme';
-import { chainName } from '@/models/network';
+import { color, text, inter, space, radius, shadow, motion, createStyles } from '@/constants/theme';
+import { chainName, nativeSymbol } from '@/models/network';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative } from '@/services/safe-transaction';
-import { findAccountByCredentialId } from '@/services/storage';
+import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth } from '@/services/safe-transaction';
+import { findAccountByCredentialId, saveTransaction } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -89,6 +89,8 @@ export default function SendScreen() {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [estimatedGas, setEstimatedGas] = useState<string | null>(null);
+  const [estimatingGas, setEstimatingGas] = useState(false);
 
   useEffect(() => {
     if (!address) return;
@@ -118,7 +120,7 @@ export default function SendScreen() {
     setStep('enter-details');
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!isValidAddress(recipient)) {
       Alert.alert('Invalid Address', 'Please enter a valid Ethereum address (0x...).');
       return;
@@ -132,6 +134,21 @@ export default function SendScreen() {
       Alert.alert('Insufficient Balance', 'Amount exceeds your available balance.');
       return;
     }
+
+    // Estimate gas fee
+    if (selectedToken && address) {
+      setEstimatingGas(true);
+      try {
+        const chainId = tokenChainId(selectedToken);
+        const fee = await estimateTransactionFee(address, chainId);
+        setEstimatedGas(formatWeiToEth(fee.totalWei));
+      } catch {
+        setEstimatedGas(null);
+      } finally {
+        setEstimatingGas(false);
+      }
+    }
+
     setStep('confirm');
   };
 
@@ -158,7 +175,7 @@ export default function SendScreen() {
         const compat = verifySafeWebAuthn(assertion);
         if (!compat.ok) {
           throw new Error(
-            'Your passkey provider is not compatible with Vela Wallet. ' +
+            'Your device\'s identity provider is not compatible with Vela Wallet. ' +
             'Please switch to Google Password Manager.\n\n' + compat.reason,
           );
         }
@@ -186,6 +203,22 @@ export default function SendScreen() {
       }
 
       clearTokenCache(activeAccount.address);
+
+      // Record transaction locally
+      await saveTransaction({
+        id: result.userOpHash,
+        userOpHash: result.userOpHash,
+        txHash: result.txHash,
+        from: activeAccount.address,
+        to: recipient,
+        value: amount,
+        symbol: selectedToken.symbol,
+        decimals: selectedToken.decimals,
+        chainId,
+        timestamp: Math.floor(Date.now() / 1000),
+        status: 'confirmed',
+      });
+
       Alert.alert(
         'Transaction Confirmed',
         `Transaction hash:\n${result.txHash.slice(0, 16)}...`,
@@ -354,7 +387,10 @@ export default function SendScreen() {
             <View style={styles.confirmSeparator} />
             <ConfirmRow label="Network" value={chainName(tokenChainId(selectedToken))} />
             <View style={styles.confirmSeparator} />
-            <ConfirmRow label="Gas" value="Sponsored" />
+            <ConfirmRow
+              label="Est. Fee"
+              value={estimatingGas ? 'Estimating...' : estimatedGas ? `~${estimatedGas} ${nativeSymbol(tokenChainId(selectedToken))}` : 'Unable to estimate'}
+            />
           </VelaCard>
 
           <VelaButton
@@ -454,13 +490,13 @@ const styles = createStyles(() => ({
   },
   stepTitle: {
     fontSize: text['3xl'],
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
     marginBottom: space['2xl'],
   },
   loadingText: {
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
     textAlign: 'center',
     marginTop: space['5xl'],
@@ -471,7 +507,7 @@ const styles = createStyles(() => ({
   },
   emptyText: {
     fontSize: text.xl,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
   },
 
@@ -491,19 +527,19 @@ const styles = createStyles(() => ({
   },
   selectedName: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   selectedBalance: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
 
   // Form fields
   fieldLabel: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -527,7 +563,7 @@ const styles = createStyles(() => ({
   },
   scanText: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.accent.base,
   },
   input: {
@@ -536,7 +572,7 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.xl,
     paddingVertical: space.xl,
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.base,
     borderWidth: 1,
     borderColor: color.border.base,
@@ -559,13 +595,13 @@ const styles = createStyles(() => ({
   },
   maxText: {
     fontSize: text.sm,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.accent.base,
     letterSpacing: 0.5,
   },
   usdPreview: {
     fontSize: text.base,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.fg.muted,
     marginBottom: space['2xl'],
     paddingLeft: space.sm,
@@ -591,19 +627,19 @@ const styles = createStyles(() => ({
   },
   confirmLabel: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
   confirmValue: {
     fontSize: text.base,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
     maxWidth: '60%',
     textAlign: 'right',
   },
   confirmValueHighlight: {
     fontSize: text.lg,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.accent.base,
   },
   confirmBtn: {

@@ -5,7 +5,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { color, text, weight, radius, space, shadow, motion, createStyles } from '@/constants/theme';
+import { color, text, inter, radius, space, shadow, motion, createStyles } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(
   require('react-native').Pressable,
@@ -82,7 +82,7 @@ const styles = createStyles(() => ({
   },
   text: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
   },
   textCompact: {
     fontSize: text.base,

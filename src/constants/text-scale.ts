@@ -13,15 +13,16 @@ const STORAGE_KEY = 'vela.textScale';
 export type TextScaleLevel = 'compact' | 'small' | 'standard' | 'comfortable' | 'large' | 'xlarge';
 
 export const TEXT_SCALE_LEVELS: { key: TextScaleLevel; label: string; factor: number }[] = [
-  { key: 'compact',     label: 'Compact',     factor: 0.85 },
-  { key: 'small',       label: 'Small',       factor: 0.92 },
+  { key: 'compact',     label: 'Compact',     factor: 0.82 },
+  { key: 'small',       label: 'Small',       factor: 0.91 },
   { key: 'standard',    label: 'Standard',    factor: 1.0  },
-  { key: 'comfortable', label: 'Comfortable', factor: 1.08 },
-  { key: 'large',       label: 'Large',       factor: 1.17 },
-  { key: 'xlarge',      label: 'Extra Large', factor: 1.28 },
+  { key: 'comfortable', label: 'Comfortable', factor: 1.10 },
+  { key: 'large',       label: 'Large',       factor: 1.22 },
+  { key: 'xlarge',      label: 'Extra Large', factor: 1.35 },
 ];
 
-const DEFAULT_LEVEL: TextScaleLevel = Platform.OS === 'android' ? 'comfortable' : 'standard';
+// Same default on both platforms — Inter renders identically everywhere
+const DEFAULT_LEVEL: TextScaleLevel = 'standard';
 
 // ---------------------------------------------------------------------------
 // Synchronous module-level cache (for initial StyleSheet.create)

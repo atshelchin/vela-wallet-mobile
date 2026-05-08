@@ -8,38 +8,28 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
+import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import * as WebBrowser from 'expo-web-browser';
 import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
 
-// MARK: - Types
-
-interface Transaction {
-  hash: string;
-  from: string;
-  to: string;
-  value: string;
-  timestamp: number;
-  status: 'success' | 'failed' | 'pending';
-  chainId: number;
-  isIncoming: boolean;
-}
-
-interface TransactionGroup {
-  title: string;
-  data: Transaction[];
-}
-
 // MARK: - Helpers
 
-function explorerUrlForAddress(address: string, chainId: number): string {
+function explorerTxUrl(txHash: string, chainId: number): string {
+  const network = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
+  const base = network?.explorerURL ?? 'https://etherscan.io';
+  return `${base}/tx/${txHash}`;
+}
+
+function explorerAddressUrl(address: string, chainId: number): string {
   const network = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
   const base = network?.explorerURL ?? 'https://etherscan.io';
   return `${base}/address/${address}`;
@@ -62,20 +52,13 @@ function formatTime(timestamp: number): string {
   });
 }
 
-function formatEthValue(weiHex: string): string {
-  try {
-    const wei = BigInt(weiHex);
-    const eth = Number(wei) / 1e18;
-    if (eth === 0) return '0';
-    if (eth < 0.0001) return '< 0.0001';
-    return eth.toFixed(4).replace(/\.?0+$/, '');
-  } catch {
-    return '0';
-  }
+interface TransactionGroup {
+  title: string;
+  data: LocalTransaction[];
 }
 
-function groupByDate(txs: Transaction[]): TransactionGroup[] {
-  const groups: Record<string, Transaction[]> = {};
+function groupByDate(txs: LocalTransaction[]): TransactionGroup[] {
+  const groups: Record<string, LocalTransaction[]> = {};
   for (const tx of txs) {
     const key = formatDate(tx.timestamp);
     if (!groups[key]) groups[key] = [];
@@ -91,77 +74,72 @@ export default function HistoryScreen() {
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
 
-  const [transactions] = useState<Transaction[]>([]);
-  const [loading] = useState(false);
+  const [transactions, setTransactions] = useState<LocalTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedChainId, setSelectedChainId] = useState(1);
+  const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
 
-  const selectedNetwork = DEFAULT_NETWORKS.find((n) => n.chainId === selectedChainId);
+  const loadData = useCallback(async () => {
+    try {
+      const txs = await loadTransactions();
+      // Filter to current account
+      const filtered = txs.filter(tx => tx.from.toLowerCase() === address?.toLowerCase());
+      setTransactions(filtered);
+    } catch {}
+    setLoading(false);
+    setRefreshing(false);
+  }, [address]);
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    loadData();
+  }, [loadData]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    loadData();
+  }, [loadData]);
+
+  const filteredTxs = selectedChainId
+    ? transactions.filter(tx => tx.chainId === selectedChainId)
+    : transactions;
 
   const handleViewOnExplorer = useCallback(() => {
     if (!address) return;
-    const url = explorerUrlForAddress(address, selectedChainId);
-    WebBrowser.openBrowserAsync(url);
+    const chainId = selectedChainId ?? 1;
+    WebBrowser.openBrowserAsync(explorerAddressUrl(address, chainId));
   }, [address, selectedChainId]);
 
   const handleBack = () => router.back();
 
   // MARK: - Transaction Row
 
-  const renderTransaction = ({ item }: { item: Transaction }) => {
-    const IconComponent = item.isIncoming ? ArrowDownLeft : ArrowUpRight;
-    const iconBg = item.isIncoming ? color.success.soft : color.accent.soft;
-    const iconColor = item.isIncoming ? color.success.base : color.accent.base;
-    const counterparty = item.isIncoming ? item.from : item.to;
-    const sign = item.isIncoming ? '+' : '-';
-    const amountColor = item.isIncoming ? color.success.base : color.fg.base;
-    const nativeSym =
-      DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId)?.iconLabel ?? 'ETH';
-    const statusColor =
-      item.status === 'failed'
-        ? color.accent.base
-        : item.status === 'pending'
-          ? color.fg.subtle
-          : color.fg.muted;
+  const renderTransaction = ({ item }: { item: LocalTransaction }) => {
+    const network = DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId);
+    const networkName = network?.displayName ?? `Chain ${item.chainId}`;
 
     return (
       <Pressable
         style={styles.txRow}
-        onPress={() => {
-          const network = DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId);
-          const base = network?.explorerURL ?? 'https://etherscan.io';
-          WebBrowser.openBrowserAsync(`${base}/tx/${item.hash}`);
-        }}
+        onPress={() => WebBrowser.openBrowserAsync(explorerTxUrl(item.txHash, item.chainId))}
       >
-        <View style={[styles.txIcon, { backgroundColor: iconBg }]}>
-          <IconComponent size={18} color={iconColor} strokeWidth={2.5} />
+        <View style={[styles.txIcon, { backgroundColor: color.accent.soft }]}>
+          <ArrowUpRight size={18} color={color.accent.base} strokeWidth={2.5} />
         </View>
 
         <View style={styles.txInfo}>
-          <Text style={styles.txType}>
-            {item.isIncoming ? 'Received' : 'Sent'}
-          </Text>
+          <Text style={styles.txType}>Sent {item.symbol}</Text>
           <Text style={styles.txAddress}>
-            {item.isIncoming ? 'From ' : 'To '}
-            {shortAddress(counterparty)}
+            To {shortAddress(item.to)} · {networkName}
           </Text>
         </View>
 
         <View style={styles.txValues}>
-          <Text style={[styles.txAmount, { color: amountColor }]}>
-            {sign}{formatEthValue(item.value)} {nativeSym}
+          <Text style={styles.txAmount}>
+            -{item.value} {item.symbol}
           </Text>
-          <Text style={[styles.txTime, { color: statusColor }]}>
-            {item.status === 'pending'
-              ? 'Pending'
-              : item.status === 'failed'
-                ? 'Failed'
-                : formatTime(item.timestamp)}
+          <Text style={styles.txTime}>
+            {item.status === 'failed' ? 'Failed' : formatTime(item.timestamp)}
           </Text>
         </View>
       </Pressable>
@@ -174,6 +152,39 @@ export default function HistoryScreen() {
     </View>
   );
 
+  // MARK: - Chain Filter
+
+  const renderChainFilter = () => {
+    const chainsWithTxs = [...new Set(transactions.map(tx => tx.chainId))];
+    if (chainsWithTxs.length <= 1) return null;
+
+    return (
+      <View style={styles.chainFilterRow}>
+        <Pressable
+          style={[styles.chainFilterChip, !selectedChainId && styles.chainFilterChipActive]}
+          onPress={() => setSelectedChainId(null)}
+        >
+          <Text style={[styles.chainFilterText, !selectedChainId && styles.chainFilterTextActive]}>All</Text>
+        </Pressable>
+        {chainsWithTxs.map(chainId => {
+          const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+          const isActive = selectedChainId === chainId;
+          return (
+            <Pressable
+              key={chainId}
+              style={[styles.chainFilterChip, isActive && styles.chainFilterChipActive]}
+              onPress={() => setSelectedChainId(isActive ? null : chainId)}
+            >
+              <Text style={[styles.chainFilterText, isActive && styles.chainFilterTextActive]}>
+                {net?.iconLabel ?? `${chainId}`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
+
   // MARK: - Empty State
 
   const renderEmpty = () => (
@@ -183,44 +194,16 @@ export default function HistoryScreen() {
           <View style={styles.emptyIconWrap}>
             <ExternalLink size={28} color={color.fg.subtle} />
           </View>
-          <Text style={styles.emptyTitle}>No History Yet</Text>
+          <Text style={styles.emptyTitle}>No Transactions Yet</Text>
           <Text style={styles.emptyBody}>
-            View your full transaction history on the block explorer.
+            Your sent transactions will appear here. You can also view full history on the block explorer.
           </Text>
           <VelaButton
-            title={`View on ${selectedNetwork?.displayName ?? 'Explorer'}`}
+            title="View on Explorer"
             onPress={handleViewOnExplorer}
             variant="accent"
             style={styles.explorerBtn}
           />
-        </VelaCard>
-      </Animated.View>
-
-      {/* Network Selector */}
-      <Animated.View entering={fadeInDown(200, 400)}>
-        <Text style={styles.networkLabel}>SELECT NETWORK</Text>
-        <VelaCard style={styles.networkCard}>
-          {DEFAULT_NETWORKS.map((net) => {
-            const isSelected = net.chainId === selectedChainId;
-            return (
-              <Pressable
-                key={net.id}
-                style={[styles.networkRow, isSelected && styles.networkRowSelected]}
-                onPress={() => setSelectedChainId(net.chainId)}
-              >
-                <View style={[styles.networkDot, { backgroundColor: net.iconColor }]} />
-                <Text
-                  style={[
-                    styles.networkName,
-                    isSelected && styles.networkNameSelected,
-                  ]}
-                >
-                  {net.displayName}
-                </Text>
-                {isSelected && <Check size={16} color={color.accent.base} strokeWidth={2.5} />}
-              </Pressable>
-            );
-          })}
         </VelaCard>
       </Animated.View>
     </View>
@@ -228,17 +211,17 @@ export default function HistoryScreen() {
 
   // MARK: - Render
 
-  const groups = groupByDate(transactions);
+  const groups = groupByDate(filteredTxs);
 
   type ListItem =
     | { type: 'header'; title: string; key: string }
-    | { type: 'tx'; tx: Transaction; key: string };
+    | { type: 'tx'; tx: LocalTransaction; key: string };
 
   const listData: ListItem[] = [];
   for (const group of groups) {
     listData.push({ type: 'header', title: group.title, key: `h-${group.title}` });
     for (const tx of group.data) {
-      listData.push({ type: 'tx', tx, key: tx.hash });
+      listData.push({ type: 'tx', tx, key: tx.id });
     }
   }
 
@@ -268,24 +251,34 @@ export default function HistoryScreen() {
       ) : transactions.length === 0 ? (
         renderEmpty()
       ) : (
-        <FlatList
-          data={listData}
-          keyExtractor={(item) => item.key}
-          renderItem={({ item }) =>
-            item.type === 'header'
-              ? renderSectionHeader(item.title)
-              : renderTransaction({ item: item.tx })
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={color.accent.base}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-        />
+        <>
+          {renderChainFilter()}
+          <FlatList
+            data={listData}
+            keyExtractor={(item) => item.key}
+            renderItem={({ item }) =>
+              item.type === 'header'
+                ? renderSectionHeader(item.title)
+                : renderTransaction({ item: item.tx })
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={color.accent.base}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              filteredTxs.length === 0 && transactions.length > 0 ? (
+                <View style={styles.emptyFilterContainer}>
+                  <Text style={styles.emptyFilterText}>No transactions on this network</Text>
+                </View>
+              ) : null
+            }
+          />
+        </>
       )}
     </ScreenContainer>
   );
@@ -308,7 +301,7 @@ const styles = createStyles(() => ({
   },
   navTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   navSpacer: { minWidth: 60 },
@@ -323,7 +316,7 @@ const styles = createStyles(() => ({
   },
   addressText: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.muted,
   },
@@ -335,11 +328,40 @@ const styles = createStyles(() => ({
   },
   loadingText: {
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
   listContent: {
     paddingBottom: space['5xl'],
+  },
+
+  // Chain filter
+  chainFilterRow: {
+    flexDirection: 'row',
+    gap: space.md,
+    paddingBottom: space.lg,
+    flexWrap: 'wrap',
+  },
+  chainFilterChip: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
+    borderWidth: 1,
+    borderColor: color.border.base,
+  },
+  chainFilterChipActive: {
+    backgroundColor: color.accent.soft,
+    borderColor: color.accent.base,
+  },
+  chainFilterText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
+  },
+  chainFilterTextActive: {
+    color: color.accent.base,
+    ...inter.semibold,
   },
 
   // Section Headers
@@ -349,7 +371,7 @@ const styles = createStyles(() => ({
   },
   sectionTitle: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -375,12 +397,12 @@ const styles = createStyles(() => ({
   },
   txType: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   txAddress: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
   txValues: {
@@ -389,11 +411,12 @@ const styles = createStyles(() => ({
   },
   txAmount: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
+    color: color.fg.base,
   },
   txTime: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
   },
 
@@ -418,12 +441,12 @@ const styles = createStyles(() => ({
   },
   emptyTitle: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
   },
   emptyBody: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.muted,
     textAlign: 'center',
     lineHeight: 22,
@@ -433,41 +456,14 @@ const styles = createStyles(() => ({
     width: '100%',
   },
 
-  // Network selector
-  networkLabel: {
-    fontSize: text.sm,
-    fontWeight: weight.semibold,
-    color: color.fg.subtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: space['3xl'],
-    marginBottom: space.lg,
-  },
-  networkCard: {
-    paddingVertical: space.sm,
-  },
-  networkRow: {
-    flexDirection: 'row',
+  // Empty filter
+  emptyFilterContainer: {
     alignItems: 'center',
-    paddingVertical: space.lg,
-    paddingHorizontal: space['2xl'],
-    gap: space.lg,
+    paddingTop: space['5xl'],
   },
-  networkRowSelected: {
-    backgroundColor: color.bg.sunken,
-  },
-  networkDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  networkName: {
+  emptyFilterText: {
     fontSize: text.base,
-    fontWeight: weight.regular,
-    color: color.fg.base,
-    flex: 1,
-  },
-  networkNameSelected: {
-    fontWeight: weight.semibold,
+    ...inter.medium,
+    color: color.fg.muted,
   },
 }));

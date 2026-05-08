@@ -1,24 +1,25 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, FlatList, RefreshControl, Alert, AppState, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { TokenRow } from '@/components/ui/TokenRow';
+import { VelaCard } from '@/components/ui/VelaCard';
+import { AppModal } from '@/components/ui/AppModal';
+import { fadeIn, fadeInDown } from '@/constants/entering';
+import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { chainName } from '@/models/network';
+import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue, type APIToken } from '@/models/types';
+import { useWallet, shortAddress } from '@/models/wallet-state';
+import { loadCustomTokens } from '@/services/storage';
+import { fetchTokens } from '@/services/wallet-api';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
+import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X } from 'lucide-react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Alert, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { fadeIn, fadeInDown } from '@/constants/entering';
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { VelaCard } from '@/components/ui/VelaCard';
-import { TokenRow } from '@/components/ui/TokenRow';
-import { color, text, weight, space, radius, shadow, motion, font, createStyles } from '@/constants/theme';
-import { useWallet } from '@/models/wallet-state';
-import { fetchTokens } from '@/services/wallet-api';
-import { loadCustomTokens } from '@/services/storage';
-import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBalance, shortAddr, type APIToken } from '@/models/types';
-import { chainName } from '@/models/network';
-import { ArrowUp, ArrowDown, Clock, Copy, Plus, Check } from 'lucide-react-native';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 
@@ -72,7 +73,7 @@ function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; i
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { activeAccount, state } = useWallet();
+  const { activeAccount, state, dispatch } = useWallet();
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,6 +144,10 @@ export default function HomeScreen() {
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [tokenSearch, setTokenSearch] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+
   const [copied, setCopied] = useState(false);
   const copyAddress = async () => {
     if (!address) return;
@@ -172,29 +177,37 @@ export default function HomeScreen() {
     <View style={styles.header}>
       {/* Account chip */}
       <Animated.View entering={fadeIn(0, 400)}>
-        <Pressable style={styles.accountChip} onPress={copyAddress}>
-          <View style={styles.accountAvatar}>
-            <Text style={styles.accountAvatarText}>
-              {(accountName[0] ?? 'V').toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.accountTextGroup}>
-            <Text style={styles.accountName}>{accountName}</Text>
-            <View style={styles.addrRow}>
-              <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-              {copied ? (
-                <Check size={10} color={color.accent.base} strokeWidth={3} />
-              ) : (
-                <Copy size={10} color={color.fg.subtle} strokeWidth={2} />
-              )}
+        <View style={styles.accountChipWrap}>
+          <Pressable
+            style={styles.accountChip}
+            onPress={state.accounts.length > 1 ? () => setShowAccountSwitcher(true) : copyAddress}
+            onLongPress={copyAddress}
+          >
+            <View style={styles.accountAvatar}>
+              <Text style={styles.accountAvatarText}>
+                {(accountName[0] ?? 'V').toUpperCase()}
+              </Text>
             </View>
-          </View>
-        </Pressable>
+            <View style={styles.accountTextGroup}>
+              <Text style={styles.accountName}>{accountName}</Text>
+              <View style={styles.addrRow}>
+                <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
+                {copied ? (
+                  <Check size={10} color={color.accent.base} strokeWidth={3} />
+                ) : state.accounts.length > 1 ? (
+                  <ChevronDown size={10} color={color.fg.subtle} strokeWidth={2.5} />
+                ) : (
+                  <Copy size={10} color={color.fg.subtle} strokeWidth={2} />
+                )}
+              </View>
+            </View>
+          </Pressable>
+        </View>
       </Animated.View>
 
       {/* Hero balance */}
       <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
-        <Text style={styles.balanceLabel}>Total Balance</Text>
+        {/* <Text style={styles.balanceLabel}>Total Balance</Text> */}
         <View style={styles.balanceRow}>
           <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
             {formatUsdInt(totalUsd)}
@@ -215,34 +228,76 @@ export default function HomeScreen() {
       {/* Token list header */}
       <View style={styles.tokenListHeader}>
         <Text style={styles.tokenListTitle}>Assets</Text>
-        <Pressable
-          style={styles.addTokenBtn}
-          onPress={() => router.push('/add-token')}
-          hitSlop={8}
-        >
-          <Plus size={14} color={color.accent.base} strokeWidth={2.5} />
-          <Text style={styles.addTokenText}>Add</Text>
-        </Pressable>
+        <View style={styles.tokenListActions}>
+          <Pressable
+            style={styles.searchToggleBtn}
+            onPress={() => { setShowSearch(!showSearch); if (showSearch) setTokenSearch(''); }}
+            hitSlop={8}
+          >
+            {showSearch ? (
+              <X size={14} color={color.fg.muted} strokeWidth={2.5} />
+            ) : (
+              <Search size={14} color={color.fg.muted} strokeWidth={2.5} />
+            )}
+          </Pressable>
+          <Pressable
+            style={styles.addTokenBtn}
+            onPress={() => router.push('/add-token')}
+            hitSlop={8}
+          >
+            <Plus size={14} color={color.accent.base} strokeWidth={2.5} />
+            <Text style={styles.addTokenText}>Add</Text>
+          </Pressable>
+        </View>
       </View>
+
+      {/* Search bar */}
+      {showSearch && (
+        <View style={styles.searchBar}>
+          <Search size={14} color={color.fg.subtle} strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tokens..."
+            placeholderTextColor={color.fg.subtle}
+            value={tokenSearch}
+            onChangeText={setTokenSearch}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+      )}
     </View>
   );
 
   const renderEmpty = () => {
     if (loading) return null;
     return (
-      <VelaCard style={styles.emptyCard}>
-        <Text style={styles.emptyTitle}>No tokens yet</Text>
-        <Text style={styles.emptySubtext}>
-          Receive tokens to your wallet address to get started
-        </Text>
-      </VelaCard>
+      <Pressable onPress={() => router.push('/receive')}>
+        <VelaCard style={styles.emptyCard}>
+          <View style={styles.emptyIconWrap}>
+            <ArrowDown size={22} color={color.accent.base} strokeWidth={2.5} />
+          </View>
+          <Text style={styles.emptyTitle}>Deposit your first asset</Text>
+          <Text style={styles.emptySubtext}>
+            Tap here to see your address and receive tokens
+          </Text>
+        </VelaCard>
+      </Pressable>
     );
   };
+
+  const filteredTokens = tokenSearch
+    ? tokens.filter(t =>
+        t.symbol.toLowerCase().includes(tokenSearch.toLowerCase()) ||
+        t.name.toLowerCase().includes(tokenSearch.toLowerCase())
+      )
+    : tokens;
 
   return (
     <ScreenContainer>
       <FlatList
-        data={tokens}
+        data={filteredTokens}
         keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
@@ -267,6 +322,42 @@ export default function HomeScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Account Switcher */}
+      <AppModal visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)}>
+        <View style={styles.switcherContainer}>
+          <View style={styles.switcherHeader}>
+            <Text style={styles.switcherTitle}>Switch Account</Text>
+            <Pressable onPress={() => setShowAccountSwitcher(false)} hitSlop={8}>
+              <X size={22} color={color.fg.base} strokeWidth={2} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.switcherScroll}>
+            {state.accounts.map((account, index) => {
+              const isActive = index === state.activeAccountIndex;
+              return (
+                <Pressable
+                  key={account.id}
+                  style={[styles.switcherItem, isActive && styles.switcherItemActive]}
+                  onPress={() => {
+                    dispatch({ type: 'SWITCH_ACCOUNT', index });
+                    setShowAccountSwitcher(false);
+                  }}
+                >
+                  <View style={styles.switcherAvatar}>
+                    <Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.switcherInfo}>
+                    <Text style={styles.switcherName}>{account.name}</Text>
+                    <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
+                  </View>
+                  {isActive && <Check size={18} color={color.accent.base} />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </AppModal>
     </ScreenContainer>
   );
 }
@@ -281,10 +372,12 @@ const styles = createStyles(() => ({
   },
 
   // Account chip
+  accountChipWrap: {
+    alignItems: 'center',
+  },
   accountChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
     gap: space.md,
     paddingVertical: space.sm,
     paddingHorizontal: space.lg,
@@ -301,7 +394,7 @@ const styles = createStyles(() => ({
   },
   accountAvatarText: {
     fontSize: text.xs,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.accent.base,
   },
   accountTextGroup: {
@@ -309,7 +402,7 @@ const styles = createStyles(() => ({
   },
   accountName: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   addrRow: {
@@ -319,7 +412,7 @@ const styles = createStyles(() => ({
   },
   accountAddr: {
     fontSize: text.xs,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.fg.subtle,
   },
 
@@ -331,7 +424,7 @@ const styles = createStyles(() => ({
   },
   balanceLabel: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -344,12 +437,12 @@ const styles = createStyles(() => ({
   },
   balanceInt: {
     fontSize: 36,
-    fontWeight: weight.bold,
+    ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
   },
   balanceDec: {
-    fontWeight: weight.bold,
+    ...inter.bold,
     fontFamily: font.display,
     color: color.fg.subtle,
   },
@@ -382,11 +475,11 @@ const styles = createStyles(() => ({
   },
   actionLabel: {
     fontSize: text.sm,
-    fontWeight: weight.medium,
+    ...inter.medium,
     color: color.fg.base,
   },
   actionLabelAccent: {
-    fontWeight: weight.semibold,
+    ...inter.semibold,
   },
 
   // Token list header
@@ -399,8 +492,20 @@ const styles = createStyles(() => ({
   },
   tokenListTitle: {
     fontSize: text.lg,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
+  },
+  tokenListActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  searchToggleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addTokenBtn: {
     flexDirection: 'row',
@@ -411,8 +516,96 @@ const styles = createStyles(() => ({
   },
   addTokenText: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.accent.base,
+  },
+
+  // Search
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    marginBottom: space.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.base,
+    paddingVertical: space.xs,
+  },
+
+  // Account Switcher Modal
+  switcherContainer: {
+    flex: 1,
+    backgroundColor: color.bg.base,
+  },
+  switcherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space['3xl'],
+    paddingVertical: space.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.base,
+  },
+  switcherTitle: {
+    fontSize: text.xl,
+    ...inter.bold,
+    color: color.fg.base,
+  },
+  switcherScroll: {
+    padding: space['3xl'],
+  },
+  switcherItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: space.xl,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    marginBottom: space.lg,
+    gap: space.lg,
+    ...shadow.sm,
+  },
+  switcherItemActive: {
+    borderColor: color.accent.base,
+    borderWidth: 1.5,
+  },
+  switcherAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: color.accent.soft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switcherAvatarText: {
+    fontSize: text.lg,
+    ...inter.semibold,
+    color: color.accent.base,
+  },
+  switcherInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  switcherName: {
+    fontSize: text.lg,
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  switcherAddr: {
+    fontSize: text.sm,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.subtle,
   },
 
   // Empty
@@ -421,14 +614,23 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     gap: space.md,
   },
+  emptyIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: color.accent.soft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.sm,
+  },
   emptyTitle: {
     fontSize: text.xl,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.muted,
   },
   emptySubtext: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
     lineHeight: 20,

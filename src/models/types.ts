@@ -75,7 +75,13 @@ export function tokenChainId(t: APIToken): number {
     case 'matic-mainnet': return 137;
     case 'bnb-mainnet': return 56;
     case 'avax-mainnet': return 43114;
-    default: return 1;
+    case 'gnosis-mainnet': return 100;
+    default: {
+      // Support custom networks with "chain-{chainId}" format
+      const match = t.network.match(/^chain-(\d+)$/);
+      if (match) return parseInt(match[1], 10);
+      return 1;
+    }
   }
 }
 
@@ -142,6 +148,71 @@ export interface NetworkConfig {
   explorerURL: string;
   bundlerURL: string;
 }
+
+// MARK: - Bundler / Deployer
+
+export interface BundlerDeployerInfo {
+  walletAddress: string;
+  bundlerAddress: string;
+  deployerAddress: string;
+}
+
+export type FundingStatus = 'not_funded' | 'funded' | 'low_balance';
+
+export interface NetworkFundingStatus {
+  chainId: number;
+  bundlerBalance: string;
+  deployerBalance: string;
+  bundlerStatus: FundingStatus;
+  deployerStatus: FundingStatus;
+}
+
+// MARK: - Custom Network
+
+export interface CustomNetwork {
+  id: string;
+  displayName: string;
+  chainId: number;
+  iconLabel: string;
+  iconColor: string;
+  iconBg: string;
+  logoURL: string;
+  isL2: boolean;
+  rpcURL: string;
+  explorerURL: string;
+  bundlerURL: string;
+  nativeSymbol: string;
+  addedAt: string;
+}
+
+// MARK: - Compatibility Check
+
+export interface CompatibilityResult {
+  chainId: number;
+  factoryDeployed: boolean;
+  bytecodeMatch: boolean;
+  compatible: boolean;
+  error?: string;
+}
+
+// MARK: - Service Endpoints
+
+export interface ServiceEndpoints {
+  /** Ethereum data index URL */
+  ethereumDataURL: string;
+  /** Passkeys public key index URL */
+  passkeyIndexURL: string;
+  /** ERC-4337 bundler service URL */
+  bundlerServiceURL: string;
+}
+
+export type PriceSource = 'api' | 'dex';
+
+export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
+  ethereumDataURL: 'https://ethereum-data.awesometools.dev',
+  passkeyIndexURL: 'https://webauthnp256-publickey-index.biubiu.tools',
+  bundlerServiceURL: 'https://api.pimlico.io',
+};
 
 // MARK: - BLE Message Types
 

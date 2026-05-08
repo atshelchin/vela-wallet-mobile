@@ -30,7 +30,7 @@ export default function OnboardingScreen() {
       const supported = await Passkey.isSupported();
       console.log('[Login] Passkey supported:', supported);
       if (!supported) {
-        Alert.alert('Not Supported', 'Passkeys are not supported on this device.');
+        Alert.alert('Not Supported', 'Biometric authentication is not available on this device.');
         return;
       }
 
@@ -46,7 +46,7 @@ export default function OnboardingScreen() {
       if (!compat.ok) {
         Alert.alert(
           'Device Not Compatible',
-          'Your passkey provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.',
+          'Your device\'s identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.',
         );
         return;
       }
@@ -110,10 +110,18 @@ export default function OnboardingScreen() {
         if (msg.includes('404')) {
           Alert.alert(
             'Account Not Found',
-            'No wallet was found for this passkey. Please create a new wallet first.',
+            'No wallet was found for this identity.\n\n' +
+            'Possible reasons:\n' +
+            '• You haven\'t created a wallet yet\n' +
+            '• Your identity hasn\'t synced to this device (check iCloud / Google settings)\n' +
+            '• The public key server is unreachable\n\n' +
+            'Try creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.',
           );
         } else {
-          Alert.alert('Login Failed', msg);
+          Alert.alert(
+            'Sign In Failed',
+            msg + '\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.',
+          );
         }
       }
     } finally {

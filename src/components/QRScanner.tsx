@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera } from 'lucide-react-native';
 
 interface Props {
@@ -118,7 +118,7 @@ const styles = createStyles(() => ({
   },
   title: {
     fontSize: text.xl,
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.inverse,
   },
   permissionContainer: {
@@ -130,7 +130,7 @@ const styles = createStyles(() => ({
   },
   permissionText: {
     fontSize: text.lg,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
     lineHeight: 22,
@@ -143,7 +143,7 @@ const styles = createStyles(() => ({
   },
   permissionButtonText: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.inverse,
   },
   cameraContainer: {
@@ -209,7 +209,7 @@ const styles = createStyles(() => ({
   },
   hint: {
     fontSize: text.base,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
     paddingHorizontal: space['5xl'],

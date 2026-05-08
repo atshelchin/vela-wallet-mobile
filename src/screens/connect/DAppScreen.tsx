@@ -23,7 +23,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { AppModal } from '@/components/ui/AppModal';
-import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
@@ -389,12 +389,35 @@ export default function DAppScreen() {
                 </View>
               </View>
 
-              {incomingRequest.method === 'eth_sendTransaction' && incomingRequest.params?.[0] && (
-                <View style={styles.txDetails}>
-                  <DetailRow label="To" value={shortAddr(incomingRequest.params[0].to ?? '')} />
-                  <DetailRow label="Value" value={incomingRequest.params[0].value ?? '0x0'} />
-                </View>
-              )}
+              {/* Structured request details */}
+              <View style={styles.txDetails}>
+                <Text style={styles.requestDescription}>{methodDescription(incomingRequest.method)}</Text>
+                {incomingRequest.method === 'personal_sign' && incomingRequest.params?.[0] && (
+                  <View style={styles.messagePreview}>
+                    <Text style={styles.messagePreviewLabel}>MESSAGE</Text>
+                    <Text style={styles.messagePreviewText} numberOfLines={6}>
+                      {decodePersonalMessage(incomingRequest.params[0])}
+                    </Text>
+                  </View>
+                )}
+                {incomingRequest.method === 'eth_sendTransaction' && incomingRequest.params?.[0] && (
+                  <>
+                    <DetailRow label="To" value={shortAddr(incomingRequest.params[0].to ?? '')} />
+                    <DetailRow label="Value" value={formatTxValue(incomingRequest.params[0].value)} />
+                    {incomingRequest.params[0].data && incomingRequest.params[0].data !== '0x' && (
+                      <DetailRow label="Data" value={`${incomingRequest.params[0].data.length / 2 - 1} bytes`} />
+                    )}
+                  </>
+                )}
+                {incomingRequest.method.includes('signTypedData') && incomingRequest.params && (
+                  <View style={styles.messagePreview}>
+                    <Text style={styles.messagePreviewLabel}>TYPED DATA</Text>
+                    <Text style={styles.messagePreviewText} numberOfLines={4}>
+                      {parseTypedDataSummary(incomingRequest.params)}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {signError && (
                 <View style={styles.errorRow}>
@@ -466,6 +489,58 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function decodePersonalMessage(hexMsg: string): string {
+  try {
+    const clean = hexMsg.startsWith('0x') ? hexMsg.slice(2) : hexMsg;
+    const bytes = new Uint8Array(clean.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+    const decoded = new TextDecoder().decode(bytes);
+    // Check if it's printable text
+    if (/^[\x20-\x7E\n\r\t]+$/.test(decoded)) return decoded;
+    return `0x${clean.slice(0, 64)}${clean.length > 64 ? '...' : ''}`;
+  } catch {
+    return hexMsg.slice(0, 66) + (hexMsg.length > 66 ? '...' : '');
+  }
+}
+
+function formatTxValue(value?: string): string {
+  if (!value || value === '0x0' || value === '0x') return '0 ETH';
+  try {
+    const clean = value.startsWith('0x') ? value.slice(2) : value;
+    const wei = BigInt('0x' + clean);
+    const eth = Number(wei) / 1e18;
+    if (eth === 0) return '0 ETH';
+    if (eth < 0.0001) return '< 0.0001 ETH';
+    return eth.toFixed(4).replace(/\.?0+$/, '') + ' ETH';
+  } catch {
+    return value;
+  }
+}
+
+function parseTypedDataSummary(params: any[]): string {
+  try {
+    // EIP-712: params[1] is the typed data JSON string
+    const data = typeof params[1] === 'string' ? JSON.parse(params[1]) : params[1];
+    if (data?.primaryType) {
+      const msg = data.message;
+      if (msg) {
+        const fields = Object.entries(msg).slice(0, 3).map(([k, v]) => `${k}: ${String(v).slice(0, 40)}`).join('\n');
+        return `${data.primaryType}\n${fields}`;
+      }
+      return data.primaryType;
+    }
+    return 'Structured data';
+  } catch {
+    return 'Structured data';
+  }
+}
+
+function methodDescription(m: string): string {
+  if (m === 'eth_sendTransaction') return 'This app wants to send a transaction from your wallet.';
+  if (m === 'personal_sign') return 'This app wants you to sign a message.';
+  if (m.includes('signTypedData')) return 'This app wants you to sign structured data.';
+  return 'This app is requesting a signature.';
+}
+
 function methodLabel(m: string): string {
   if (m === 'eth_sendTransaction') return 'Send Transaction';
   if (m === 'personal_sign') return 'Sign Message';
@@ -490,7 +565,7 @@ const styles = createStyles(() => ({
   scrollContent: { paddingBottom: space['5xl'] },
   pageTitle: {
     fontSize: text['2xl'],
-    fontWeight: weight.bold,
+    ...inter.bold,
     color: color.fg.base,
     marginTop: space.xl,
     marginBottom: space['2xl'],
@@ -504,20 +579,20 @@ const styles = createStyles(() => ({
     backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
   },
-  walletAvatarText: { fontSize: text.lg, fontWeight: weight.bold, color: color.accent.base },
+  walletAvatarText: { fontSize: text.lg, ...inter.bold, color: color.accent.base },
   walletInfo: { flex: 1, gap: 2 },
-  walletName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
-  walletAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle },
+  walletName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  walletAddr: { fontSize: text.sm, fontWeight: '500', fontFamily: font.mono, color: color.fg.subtle },
 
   // Sections
   section: { marginBottom: space.xl },
-  sectionTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base, marginBottom: space.sm },
-  hint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl },
+  sectionTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base, marginBottom: space.sm },
+  hint: { fontSize: text.base, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl },
   sectionBtn: { marginTop: space.lg },
   retryBtn: { marginTop: space.md },
   centered: { alignItems: 'center', paddingVertical: space['5xl'], gap: space.lg },
-  emptyText: { fontSize: text.lg, fontWeight: weight.regular, color: color.fg.muted },
-  statusText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.info.base },
+  emptyText: { fontSize: text.lg, ...inter.regular, color: color.fg.muted },
+  statusText: { fontSize: text.lg, ...inter.semibold, color: color.info.base },
   statusCard: { padding: space['2xl'] },
   pulseRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
 
@@ -534,36 +609,40 @@ const styles = createStyles(() => ({
   connectedCard: { padding: space['2xl'], gap: space.md },
   connectedRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   connectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.success.base },
-  connectedText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
-  connectedHint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
+  connectedText: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  connectedHint: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
 
   // Not installed
   notInstalledCard: { padding: space['2xl'], alignItems: 'center', gap: space.md },
-  notInstalledTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
+  notInstalledTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
 
   // Request
   requestCard: { padding: space['2xl'], gap: space.xl },
   requestHeader: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   requestHeaderText: { flex: 1, gap: 2 },
-  requestOrigin: { fontSize: text.sm, fontWeight: weight.regular, color: color.fg.muted },
-  requestMethod: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
+  requestOrigin: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  requestMethod: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   txDetails: {
     gap: space.md, paddingVertical: space.lg,
     borderTopWidth: 1, borderBottomWidth: 1, borderColor: color.border.base,
   },
+  requestDescription: { fontSize: text.base, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.md },
+  messagePreview: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, gap: space.sm },
+  messagePreviewLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1, textTransform: 'uppercase' as const },
+  messagePreviewText: { fontSize: text.sm, fontWeight: '500', fontFamily: font.mono, color: color.fg.base, lineHeight: 18 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  detailLabel: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
-  detailValue: { fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
+  detailLabel: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
+  detailValue: { fontSize: text.base, fontWeight: '500', fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  errorText: { fontSize: text.base, fontWeight: weight.regular, color: color.accent.base, flex: 1 },
+  errorText: { fontSize: text.base, ...inter.regular, color: color.accent.base, flex: 1 },
   buttonRow: { flexDirection: 'row', gap: space.lg },
   buttonFlex: { flex: 1 },
 
   // Modal
   modalContainer: { flex: 1, padding: space['3xl'] },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space['2xl'] },
-  modalTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
-  modalClose: { fontSize: text.lg, fontWeight: weight.semibold, color: color.accent.base },
+  modalTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  modalClose: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
   modalScroll: { flex: 1 },
   accountItem: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -573,6 +652,6 @@ const styles = createStyles(() => ({
   },
   accountItemActive: { borderColor: color.accent.base, backgroundColor: color.accent.soft },
   accountItemInfo: { gap: 2 },
-  accountItemName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
-  accountItemAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle },
+  accountItemName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  accountItemAddr: { fontSize: text.sm, fontWeight: '500', fontFamily: font.mono, color: color.fg.subtle },
 }));

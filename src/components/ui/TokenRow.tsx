@@ -7,7 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { fadeIn } from '@/constants/entering';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, weight, space, radius, font, motion, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
 
 interface Props {
   symbol: string;
@@ -75,12 +75,12 @@ const styles = createStyles(() => ({
   },
   symbol: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     color: color.fg.base,
   },
   chain: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     color: color.fg.subtle,
   },
   values: {
@@ -89,13 +89,13 @@ const styles = createStyles(() => ({
   },
   balance: {
     fontSize: text.lg,
-    fontWeight: weight.semibold,
+    ...inter.semibold,
     fontFamily: font.numeric,
     color: color.fg.base,
   },
   usd: {
     fontSize: text.sm,
-    fontWeight: weight.regular,
+    ...inter.regular,
     fontFamily: font.numeric,
     color: color.fg.muted,
   },
