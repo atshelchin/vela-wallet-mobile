@@ -11,7 +11,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { color, text, weight, space, radius, shadow, font, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
-import { Copy } from 'lucide-react-native';
+import { Copy, ArrowLeft } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
   const router = useRouter();
@@ -75,8 +75,8 @@ export default function TokenDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Nav bar */}
         <View style={styles.navBar}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={styles.backBtn}>Back</Text>
+          <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
+            <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
           <Text style={styles.navTitle}>{symbol}</Text>
           <View style={styles.navSpacer} />
@@ -161,11 +161,11 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     paddingVertical: space.lg,
   },
-  backBtn: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-    minWidth: 50,
+  navBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navTitle: {
     fontSize: text.xl,

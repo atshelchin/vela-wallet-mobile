@@ -10,7 +10,7 @@ import { color, text, weight, space, radius, font, shadow, createStyles } from '
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
-import { Check } from 'lucide-react-native';
+import { Check, ArrowLeft } from 'lucide-react-native';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -126,8 +126,8 @@ export default function AddTokenScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Nav bar */}
         <View style={styles.navBar}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={styles.backBtn}>Back</Text>
+          <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
+            <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
           <Text style={styles.navTitle}>Add Token</Text>
           <View style={styles.navSpacer} />
@@ -239,11 +239,11 @@ const styles = createStyles(() => ({
     paddingVertical: space.lg,
     marginBottom: space.md,
   },
-  backBtn: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-    minWidth: 50,
+  navBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navTitle: {
     fontSize: text.xl,

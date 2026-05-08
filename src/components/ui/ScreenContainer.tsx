@@ -13,16 +13,20 @@ interface Props {
 /**
  * Standard screen wrapper with safe area and consistent padding.
  *
- * Subscribes to text scale context so that when the user changes text size,
- * the screen content re-mounts with fresh styles from the createStyles proxy.
- * The outer container stays painted (no flash) — only children re-mount.
+ * Subscribes to text scale context so that when the user changes text size
+ * in Settings, this component re-renders.  Because the parent screen also
+ * re-renders (SettingsScreen consumes useTextScale), all children receive
+ * fresh JSX and the createStyles Proxy returns updated styles automatically.
+ *
+ * No key-based remounting — pure re-render, zero flicker.
  */
 export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
-  const { version } = useTextScale();
+  // Force re-render on text scale change so styles.* Proxy returns fresh values
+  useTextScale();
 
   return (
     <View style={[styles.container, style]}>
-      <SafeAreaView style={styles.safeArea} edges={edges} key={version}>
+      <SafeAreaView style={styles.safeArea} edges={edges}>
         {children}
       </SafeAreaView>
     </View>

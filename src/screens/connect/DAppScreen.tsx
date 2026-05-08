@@ -29,7 +29,7 @@ import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
 import {
-  Bluetooth, Wifi, ChevronRight, Check,
+  Bluetooth, Wifi, ChevronRight, Check, X,
   Radio, Unplug, Shield, AlertTriangle, Download,
   Send, FileSignature, FileText,
 } from 'lucide-react-native';
@@ -426,7 +426,7 @@ export default function DAppScreen() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Accounts</Text>
             <Pressable onPress={() => setShowAccountPicker(false)} hitSlop={8}>
-              <Text style={styles.modalClose}>Done</Text>
+              <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
           </View>
           <ScrollView style={styles.modalScroll}>

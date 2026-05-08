@@ -23,6 +23,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
+import { ArrowLeft, X } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 
@@ -372,10 +373,11 @@ export default function SendScreen() {
     <ScreenContainer>
       {/* Nav bar */}
       <View style={styles.navBar}>
-        <Pressable onPress={handleBack} hitSlop={8}>
-          <Text style={styles.navBack}>
-            {step === 'select-token' ? 'Cancel' : 'Back'}
-          </Text>
+        <Pressable onPress={handleBack} hitSlop={8} style={styles.navBtn}>
+          {step === 'select-token'
+            ? <X size={22} color={color.fg.base} strokeWidth={2} />
+            : <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
+          }
         </Pressable>
         <StepIndicator current={step} />
         <View style={styles.navSpacer} />
@@ -415,11 +417,11 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     paddingVertical: space.lg,
   },
-  navBack: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-    minWidth: 60,
+  navBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navSpacer: { minWidth: 60 },
 

@@ -17,7 +17,7 @@ import { color, text, weight, space, radius, font, shadow, createStyles } from '
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
 
 // MARK: - Types
 
@@ -246,8 +246,8 @@ export default function HistoryScreen() {
     <ScreenContainer>
       {/* Nav Bar */}
       <View style={styles.navBar}>
-        <Pressable onPress={handleBack} hitSlop={8}>
-          <Text style={styles.navBack}>Close</Text>
+        <Pressable onPress={handleBack} hitSlop={8} style={styles.navBtn}>
+          <X size={22} color={color.fg.base} strokeWidth={2} />
         </Pressable>
         <Text style={styles.navTitle}>History</Text>
         <View style={styles.navSpacer} />
@@ -300,11 +300,11 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     paddingVertical: space.lg,
   },
-  navBack: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-    minWidth: 60,
+  navBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navTitle: {
     fontSize: text.xl,

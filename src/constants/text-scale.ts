@@ -88,22 +88,24 @@ export function TextScaleProvider({ children }: { children: React.ReactNode }) {
     () => TEXT_SCALE_LEVELS.findIndex(l => l.key === _currentLevel),
   );
 
-  const change = useCallback(async (delta: number) => {
+  const change = useCallback((delta: number) => {
     const next = levelIndex + delta;
     if (next < 0 || next >= TEXT_SCALE_LEVELS.length) return;
 
     const level = TEXT_SCALE_LEVELS[next];
     _currentLevel = level.key;
     _currentFactor = level.factor;
-    await AsyncStorage.setItem(STORAGE_KEY, level.key).catch(() => {});
 
-    // Mutate the text token object so new StyleSheet.create picks up new values
+    // 1. Rebuild text tokens synchronously FIRST
     const { rebuildTextScale } = require('./theme');
     rebuildTextScale();
 
+    // 2. Trigger re-render synchronously (React batches these)
     setLevelIndex(next);
-    // Increment version to force tree rebuild via key change
     setVersion(v => v + 1);
+
+    // 3. Persist in background — never block the UI
+    AsyncStorage.setItem(STORAGE_KEY, level.key).catch(() => {});
   }, [levelIndex]);
 
   const value = useMemo(() => ({

@@ -18,7 +18,7 @@ import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, Type as TypeIcon } from 'lucide-react-native';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, Type as TypeIcon, X } from 'lucide-react-native';
 import type { NetworkConfig } from '@/models/types';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -180,7 +180,7 @@ function AccountSwitcherModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Accounts</Text>
           <Pressable onPress={onClose} hitSlop={8}>
-            <Text style={styles.modalClose}>Done</Text>
+            <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
 
@@ -264,7 +264,7 @@ function NetworkEditorModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Networks</Text>
           <Pressable onPress={onClose} hitSlop={8}>
-            <Text style={styles.modalClose}>Done</Text>
+            <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
 

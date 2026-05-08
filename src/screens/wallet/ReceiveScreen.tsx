@@ -21,7 +21,7 @@ import { QRCode } from '@/components/QRCode';
 import { fetchTokens } from '@/services/wallet-api';
 import { tokenUsdValue } from '@/models/types';
 import * as Haptics from 'expo-haptics';
-import { Copy, Share2, Check } from 'lucide-react-native';
+import { Copy, Share2, Check, ArrowLeft } from 'lucide-react-native';
 
 const DEPOSIT_CHECK_MS = 5 * 60 * 1000;
 const MAX_DEPOSIT_CHECKS = 3;
@@ -118,8 +118,8 @@ export default function ReceiveScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={styles.backBtn}>Back</Text>
+          <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
+            <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
           <Text style={styles.title}>Receive</Text>
           <View style={styles.headerSpacer} />
@@ -223,11 +223,11 @@ const styles = createStyles(() => ({
     paddingVertical: space.lg,
     marginBottom: space.md,
   },
-  backBtn: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-    minWidth: 50,
+  navBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: text.xl,
