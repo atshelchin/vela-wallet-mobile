@@ -16,7 +16,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
-import { DEFAULT_NETWORKS } from '@/models/network';
+import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import * as WebBrowser from 'expo-web-browser';
 import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
@@ -24,13 +24,13 @@ import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-reac
 // MARK: - Helpers
 
 function explorerTxUrl(txHash: string, chainId: number): string {
-  const network = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
+  const network = getAllNetworksSync().find((n) => n.chainId === chainId);
   const base = network?.explorerURL ?? 'https://etherscan.io';
   return `${base}/tx/${txHash}`;
 }
 
 function explorerAddressUrl(address: string, chainId: number): string {
-  const network = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
+  const network = getAllNetworksSync().find((n) => n.chainId === chainId);
   const base = network?.explorerURL ?? 'https://etherscan.io';
   return `${base}/address/${address}`;
 }
@@ -115,7 +115,7 @@ export default function HistoryScreen() {
   // MARK: - Transaction Row
 
   const renderTransaction = ({ item }: { item: LocalTransaction }) => {
-    const network = DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId);
+    const network = getAllNetworksSync().find((n) => n.chainId === item.chainId);
     const networkName = network?.displayName ?? `Chain ${item.chainId}`;
 
     return (
@@ -167,7 +167,7 @@ export default function HistoryScreen() {
           <Text style={[styles.chainFilterText, !selectedChainId && styles.chainFilterTextActive]}>All</Text>
         </Pressable>
         {chainsWithTxs.map(chainId => {
-          const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+          const net = getAllNetworksSync().find(n => n.chainId === chainId);
           const isActive = selectedChainId === chainId;
           return (
             <Pressable

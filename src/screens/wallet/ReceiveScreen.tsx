@@ -16,7 +16,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
-import { DEFAULT_NETWORKS } from '@/models/network';
+import { getAllNetworksSync } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { fetchTokens } from '@/services/wallet-api';
 import { tokenUsdValue } from '@/models/types';
@@ -190,7 +190,7 @@ export default function ReceiveScreen() {
           </Text>
 
           <VelaCard style={styles.networksCard}>
-            {DEFAULT_NETWORKS.map((network, index) => (
+            {getAllNetworksSync().map((network, index) => (
               <View key={network.id}>
                 {index > 0 && <View style={styles.separator} />}
                 <View style={styles.networkRow}>

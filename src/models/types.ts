@@ -192,6 +192,8 @@ export interface CompatibilityResult {
   factoryDeployed: boolean;
   bytecodeMatch: boolean;
   compatible: boolean;
+  /** True when all RPC attempts failed — result is inconclusive, not definitive */
+  rpcFailed?: boolean;
   error?: string;
 }
 

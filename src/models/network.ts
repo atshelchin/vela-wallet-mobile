@@ -19,62 +19,62 @@ export interface Network {
 }
 
 /** Base URL for chain logos from ethereum-data.awesometools.dev */
-const CHAIN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/chains';
+const CHAIN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/chainlogos';
 
 export const DEFAULT_NETWORKS: Network[] = [
   {
     id: 'ethereum', displayName: 'Ethereum', chainId: 1,
     iconLabel: 'ETH', iconColor: '#627EEA', iconBg: '#EEF0F8',
-    logoURL: `${CHAIN_LOGO_BASE}/1/logo.png`, isL2: false,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-1.png`, isL2: false,
     rpcURL: 'https://eth.llamarpc.com', explorerURL: 'https://etherscan.io',
     bundlerURL: 'https://api.pimlico.io/v2/1/rpc',
   },
   {
     id: 'bnb', displayName: 'BNB Chain', chainId: 56,
     iconLabel: 'BNB', iconColor: '#F0B90B', iconBg: '#FFF8E1',
-    logoURL: `${CHAIN_LOGO_BASE}/56/logo.png`, isL2: false,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-56.png`, isL2: false,
     rpcURL: 'https://bsc-dataseed.binance.org', explorerURL: 'https://bscscan.com',
     bundlerURL: 'https://api.pimlico.io/v2/56/rpc',
   },
   {
     id: 'polygon', displayName: 'Polygon', chainId: 137,
     iconLabel: 'POL', iconColor: '#8247E5', iconBg: '#F0EAFF',
-    logoURL: `${CHAIN_LOGO_BASE}/137/logo.png`, isL2: true,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-137.png`, isL2: true,
     rpcURL: 'https://polygon-rpc.com', explorerURL: 'https://polygonscan.com',
     bundlerURL: 'https://api.pimlico.io/v2/137/rpc',
   },
   {
     id: 'arbitrum', displayName: 'Arbitrum', chainId: 42161,
     iconLabel: 'ARB', iconColor: '#28A0F0', iconBg: '#E8F4FD',
-    logoURL: `${CHAIN_LOGO_BASE}/42161/logo.png`, isL2: true,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-42161.png`, isL2: true,
     rpcURL: 'https://arb1.arbitrum.io/rpc', explorerURL: 'https://arbiscan.io',
     bundlerURL: 'https://api.pimlico.io/v2/42161/rpc',
   },
   {
     id: 'optimism', displayName: 'Optimism', chainId: 10,
     iconLabel: 'OP', iconColor: '#FF0420', iconBg: '#FFECEC',
-    logoURL: `${CHAIN_LOGO_BASE}/10/logo.png`, isL2: true,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-10.png`, isL2: true,
     rpcURL: 'https://mainnet.optimism.io', explorerURL: 'https://optimistic.etherscan.io',
     bundlerURL: 'https://api.pimlico.io/v2/10/rpc',
   },
   {
     id: 'base', displayName: 'Base', chainId: 8453,
     iconLabel: 'BASE', iconColor: '#0052FF', iconBg: '#E8EEFF',
-    logoURL: `${CHAIN_LOGO_BASE}/8453/logo.png`, isL2: true,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-8453.png`, isL2: true,
     rpcURL: 'https://mainnet.base.org', explorerURL: 'https://basescan.org',
     bundlerURL: 'https://api.pimlico.io/v2/8453/rpc',
   },
   {
     id: 'avalanche', displayName: 'Avalanche', chainId: 43114,
     iconLabel: 'AVAX', iconColor: '#E84142', iconBg: '#FFF0F0',
-    logoURL: `${CHAIN_LOGO_BASE}/43114/logo.png`, isL2: false,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-43114.png`, isL2: false,
     rpcURL: 'https://api.avax.network/ext/bc/C/rpc', explorerURL: 'https://snowtrace.io',
     bundlerURL: 'https://api.pimlico.io/v2/43114/rpc',
   },
   {
     id: 'gnosis', displayName: 'Gnosis', chainId: 100,
     iconLabel: 'xDAI', iconColor: '#04795B', iconBg: '#E8F5F0',
-    logoURL: `${CHAIN_LOGO_BASE}/100/logo.png`, isL2: false,
+    logoURL: `${CHAIN_LOGO_BASE}/eip155-100.png`, isL2: false,
     rpcURL: 'https://rpc.gnosischain.com', explorerURL: 'https://gnosisscan.io',
     bundlerURL: 'https://api.pimlico.io/v2/100/rpc',
   },
@@ -149,8 +149,16 @@ export function customToNetwork(cn: CustomNetwork): Network {
   };
 }
 
-/** Get all networks: default + custom. */
+/**
+ * Get all networks synchronously (uses in-memory cache).
+ * Call refreshCustomNetworks() at app start to populate the cache.
+ */
+export function getAllNetworksSync(): Network[] {
+  return [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
+}
+
+/** Get all networks: default + custom (refreshes cache first). */
 export async function getAllNetworks(): Promise<Network[]> {
   await refreshCustomNetworks();
-  return [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
+  return getAllNetworksSync();
 }

@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
-import { DEFAULT_NETWORKS } from '@/models/network';
+import { getAllNetworksSync } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
 import { Check, ArrowLeft } from 'lucide-react-native';
@@ -61,7 +61,7 @@ export default function AddTokenScreen() {
   const [tokenMeta, setTokenMeta] = useState<{ name: string; symbol: string; decimals: number } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const selectedNetwork = DEFAULT_NETWORKS.find((n) => n.chainId === selectedChainId);
+  const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId);
 
   const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(contractAddress);
 
@@ -137,7 +137,7 @@ export default function AddTokenScreen() {
         <Text style={styles.fieldLabel}>Network</Text>
         <VelaCard style={styles.chainCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chainScroll}>
-            {DEFAULT_NETWORKS.map((network) => {
+            {getAllNetworksSync().map((network) => {
               const isSelected = network.chainId === selectedChainId;
               return (
                 <Pressable
