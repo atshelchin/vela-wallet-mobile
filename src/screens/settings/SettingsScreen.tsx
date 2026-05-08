@@ -22,12 +22,19 @@ import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, loadPriceSource, savePriceSource, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, findAccountByCredentialId } from '@/services/storage';
 import { getAddresses, getAllNetworkFunding } from '@/services/deployer-api';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { fetchChainInfo } from '@/services/chain-registry';
+import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Fuel, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, PriceSource, BundlerDeployerInfo, NetworkFundingStatus, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import { nativeSymbol } from '@/models/network';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 
 // All styles in one factory → useStyles recomputes everything on text scale change
@@ -53,6 +60,85 @@ function SettingsRow({ s, icon, title, subtitle, showDivider = true, onPress, ri
   );
 }
 
+type EndpointHealth = { status: 'checking' | 'ok' | 'error'; latencyMs?: number };
+
+async function checkEndpointHealth(url: string, type: 'rpc' | 'explorer' | 'bundler'): Promise<EndpointHealth> {
+  if (!url) return { status: 'error' };
+  const start = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    if (type === 'rpc') {
+      if (url.startsWith('wss://') || url.startsWith('ws://')) {
+        // WebSocket RPC: open connection, send eth_chainId, wait for response
+        return await new Promise<EndpointHealth>((resolve) => {
+          const ws = new WebSocket(url);
+          const done = (result: EndpointHealth) => { try { ws.close(); } catch {} clearTimeout(timeout); resolve(result); };
+          ws.onopen = () => { ws.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] })); };
+          ws.onmessage = (e) => { try { const d = JSON.parse(e.data); if (d.result) done({ status: 'ok', latencyMs: Date.now() - start }); else done({ status: 'error' }); } catch { done({ status: 'error' }); } };
+          ws.onerror = () => done({ status: 'error' });
+          controller.signal.addEventListener('abort', () => done({ status: 'error' }));
+        });
+      }
+      // HTTPS RPC: send eth_chainId, check for valid JSON-RPC response
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return { status: 'error' };
+      const json = await res.json();
+      if (json.result) return { status: 'ok', latencyMs: Date.now() - start };
+      return { status: 'error' };
+    } else if (type === 'bundler') {
+      // Bundler: may require API key, just check if server responds (even 401/403 means reachable)
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      // Any HTTP response means the server is reachable
+      return { status: 'ok', latencyMs: Date.now() - start };
+    } else {
+      // Explorer: GET the URL, follow redirects, accept any 2xx/3xx
+      const res = await fetch(url, { method: 'GET', signal: controller.signal, redirect: 'follow' });
+      clearTimeout(timeout);
+      return { status: res.ok ? 'ok' : 'error', latencyMs: Date.now() - start };
+    }
+  } catch {
+    clearTimeout(timeout);
+    return { status: 'error' };
+  }
+}
+
+function HealthBadge({ health }: { health: EndpointHealth }) {
+  if (health.status === 'checking') {
+    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
+  }
+  const dotColor = health.status === 'ok' ? color.success.base : color.accent.base;
+  const label = health.status === 'ok'
+    ? `${health.latencyMs}ms`
+    : 'Offline';
+  return (
+    <View style={healthStyles.badge}>
+      <View style={[healthStyles.dot, { backgroundColor: dotColor }]} />
+      <Text style={[healthStyles.text, { color: health.status === 'ok' ? color.success.base : color.accent.base }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const healthStyles = {
+  badge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginLeft: 8 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  text: { fontSize: 11, fontWeight: '500' as const },
+};
+
 function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
   s: S; network: Network; savedConfig?: NetworkConfig;
   onSave: (config: NetworkConfig) => void; onDelete?: () => void;
@@ -61,10 +147,26 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
   const [rpcURL, setRpcURL] = useState(savedConfig?.rpcURL ?? network.rpcURL);
   const [explorerURL, setExplorerURL] = useState(savedConfig?.explorerURL ?? network.explorerURL);
   const [bundlerURL, setBundlerURL] = useState(savedConfig?.bundlerURL ?? network.bundlerURL);
+  const [healths, setHealths] = useState<[EndpointHealth, EndpointHealth, EndpointHealth]>([
+    { status: 'checking' }, { status: 'checking' }, { status: 'checking' },
+  ]);
 
   const handleSave = useCallback(() => {
     onSave({ chainId: network.chainId, rpcURL, explorerURL, bundlerURL });
   }, [network.chainId, rpcURL, explorerURL, bundlerURL, onSave]);
+
+  // Run health checks when expanded
+  useEffect(() => {
+    if (!expanded) return;
+    setHealths([{ status: 'checking' }, { status: 'checking' }, { status: 'checking' }]);
+    const urls = [rpcURL, explorerURL, bundlerURL];
+    const types: ('rpc' | 'explorer' | 'bundler')[] = ['rpc', 'explorer', 'bundler'];
+    urls.forEach((url, i) => {
+      checkEndpointHealth(url, types[i]).then(h => {
+        setHealths(prev => { const next = [...prev] as typeof prev; next[i] = h; return next; });
+      });
+    });
+  }, [expanded, rpcURL, explorerURL, bundlerURL]);
 
   return (
     <VelaCard style={s.networkCard}>
@@ -89,7 +191,10 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
             const setters = [setRpcURL, setExplorerURL, setBundlerURL];
             return (
               <View key={label} style={s.configField}>
-                <Text style={s.configLabel}>{label}</Text>
+                <View style={s.configLabelRow}>
+                  <Text style={s.configLabel}>{label}</Text>
+                  <HealthBadge health={healths[i]} />
+                </View>
                 <TextInput style={s.configInput} value={vals[i]} onChangeText={setters[i]} onBlur={handleSave}
                   autoCapitalize="none" autoCorrect={false} placeholder={label} placeholderTextColor={color.fg.subtle} />
               </View>
@@ -357,32 +462,72 @@ function BundlerDeployerModal({ s, visible, onClose, publicKeyHex }: { s: S; vis
 // ---------------------------------------------------------------------------
 
 function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void }) {
-  const [chainIdInput, setChainIdInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<ChainSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [chainInfo, setChainInfo] = useState<Awaited<ReturnType<typeof fetchChainInfo>> | null>(null);
   const [compatResult, setCompatResult] = useState<CompatibilityResult | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const reset = () => { setChainIdInput(''); setChainInfo(null); setCompatResult(null); setError(''); };
+  const reset = () => {
+    setQuery(''); setSuggestions([]); setSelectedChainId(null);
+    setChainInfo(null); setCompatResult(null); setError('');
+  };
 
-  const handleCheck = async () => {
-    const cid = parseInt(chainIdInput.trim(), 10);
-    if (isNaN(cid) || cid <= 0) { setError('Please enter a valid Chain ID'); return; }
+  // Debounced search
+  const handleQueryChange = (text: string) => {
+    setQuery(text);
+    setSelectedChainId(null);
+    setChainInfo(null);
+    setCompatResult(null);
+    setError('');
+
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!text.trim()) { setSuggestions([]); return; }
+
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await searchChains(text);
+        setSuggestions(results);
+      } catch {} finally { setSearching(false); }
+    }, 300);
+  };
+
+  // Select a chain from suggestions
+  const handleSelect = async (chainId: number) => {
+    setSelectedChainId(chainId);
+    setSuggestions([]);
+    setLoading(true);
+    setError('');
+    setChainInfo(null);
+    setCompatResult(null);
 
     // Check if already exists
-    const existing = DEFAULT_NETWORKS.find(n => n.chainId === cid);
+    const existing = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
     const custom = await loadCustomNetworks();
-    if (existing || custom.find(n => n.chainId === cid)) { setError(`Chain ${cid} is already added`); return; }
+    if (existing || custom.find(n => n.chainId === chainId)) {
+      setError(`This network is already added`);
+      setLoading(false);
+      return;
+    }
 
-    setLoading(true); setError(''); setChainInfo(null); setCompatResult(null);
     try {
-      const info = await fetchChainInfo(cid);
-      if (!info) { setError(`Chain ${cid} not found in ethereum-data registry`); setLoading(false); return; }
+      const info = await fetchChainInfo(chainId);
+      if (!info) { setError(`Chain ${chainId} not found`); setLoading(false); return; }
       setChainInfo(info);
+      setQuery(info.name);
 
-      const compat = await checkNetworkCompatibility(info.rpcUrl, cid);
-      setCompatResult(compat);
+      if (info.rpcUrl) {
+        const compat = await checkNetworkCompatibility(info.rpcUrl, chainId);
+        setCompatResult(compat);
+      } else {
+        setError('No RPC endpoint available for this network');
+      }
     } catch (e: any) {
       setError(e.message ?? 'Check failed');
     } finally { setLoading(false); }
@@ -425,37 +570,80 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
           <Text style={s.endpointDescription}>
-            Enter a Chain ID to check compatibility. The network must have SafeSingletonFactory deployed.
+            Search by network name, token symbol, or Chain ID.
           </Text>
 
-          <View style={s.configField}>
-            <Text style={s.configLabel}>CHAIN ID</Text>
-            <TextInput style={s.configInput} value={chainIdInput} onChangeText={setChainIdInput}
-              placeholder="e.g. 100" placeholderTextColor={color.fg.subtle}
-              keyboardType="number-pad" autoFocus />
+          {/* Search input */}
+          <View style={s.searchField}>
+            <TextInput
+              style={s.configInput}
+              value={query}
+              onChangeText={handleQueryChange}
+              placeholder="e.g. Gnosis, ACE, 648..."
+              placeholderTextColor={color.fg.subtle}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
 
-          <VelaButton title="Check Compatibility" onPress={handleCheck} loading={loading} disabled={!chainIdInput.trim()} style={s.checkBtn} />
+          {/* Suggestions dropdown */}
+          {suggestions.length > 0 && !selectedChainId && (
+            <VelaCard style={s.suggestionsCard}>
+              {suggestions.map((item, idx) => (
+                <Pressable
+                  key={item.chainId}
+                  style={[s.suggestionRow, idx < suggestions.length - 1 && s.suggestionRowBorder]}
+                  onPress={() => handleSelect(item.chainId)}
+                >
+                  <View style={s.suggestionInfo}>
+                    <Text style={s.suggestionName}>{item.name}</Text>
+                    <Text style={s.suggestionMeta}>
+                      Chain {item.chainId} · {item.nativeCurrencySymbol}
+                    </Text>
+                  </View>
+                  <ChevronRight size={14} color={color.fg.subtle} />
+                </Pressable>
+              ))}
+            </VelaCard>
+          )}
+
+          {searching && (
+            <View style={s.loadingRow}>
+              <ActivityIndicator size="small" color={color.accent.base} />
+              <Text style={s.loadingText}>Searching...</Text>
+            </View>
+          )}
+
+          {loading && (
+            <View style={s.loadingRow}>
+              <ActivityIndicator size="small" color={color.accent.base} />
+              <Text style={s.loadingText}>Checking compatibility...</Text>
+            </View>
+          )}
 
           {error ? <Text style={s.addNetError}>{error}</Text> : null}
 
+          {/* Chain info result */}
           {chainInfo && (
             <VelaCard style={s.addNetResult}>
               <Text style={s.addNetResultName}>{chainInfo.name}</Text>
               <Text style={s.addNetResultDetail}>Chain ID: {chainInfo.chainId}</Text>
               <Text style={s.addNetResultDetail}>Native: {chainInfo.nativeCurrency.symbol}</Text>
-              {chainInfo.explorerUrl ? <Text style={s.addNetResultDetail}>Explorer: {chainInfo.explorerUrl}</Text> : null}
+              {chainInfo.rpcUrl ? <Text style={s.addNetResultDetail} numberOfLines={1}>RPC: {chainInfo.rpcUrl}</Text> : null}
+              {chainInfo.explorerUrl ? <Text style={s.addNetResultDetail} numberOfLines={1}>Explorer: {chainInfo.explorerUrl}</Text> : null}
               {chainInfo.isTestnet && <Text style={s.addNetTestnet}>Testnet</Text>}
             </VelaCard>
           )}
 
-          {compatResult && (
+          {/* Compatibility result */}
+          {compatResult && !compatResult.rpcFailed && (
             <VelaCard style={s.addNetCompat}>
               <View style={s.addNetCompatRow}>
                 {compatResult.factoryDeployed
                   ? <CheckCircle2 size={16} color={color.success.base} strokeWidth={2} />
                   : <XCircle size={16} color={color.accent.base} strokeWidth={2} />}
-                <Text style={s.addNetCompatText}>SafeSingletonFactory {compatResult.factoryDeployed ? 'deployed' : 'not found'}</Text>
+                <Text style={s.addNetCompatText}>SafeSingletonFactory {compatResult.factoryDeployed ? 'deployed' : 'not deployed'}</Text>
               </View>
               {compatResult.factoryDeployed && (
                 <View style={s.addNetCompatRow}>
@@ -465,23 +653,131 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
                   <Text style={s.addNetCompatText}>Bytecode {compatResult.bytecodeMatch ? 'matches' : 'does not match'} ETH mainnet</Text>
                 </View>
               )}
-              {compatResult.error && !compatResult.compatible && (
-                <Text style={s.addNetCompatError}>{compatResult.error}</Text>
-              )}
+            </VelaCard>
+          )}
+
+          {/* RPC failure — inconclusive, allow retry */}
+          {compatResult?.rpcFailed && (
+            <VelaCard style={s.addNetCompat}>
+              <View style={s.addNetCompatRow}>
+                <AlertTriangle size={16} color={'#E8A317'} strokeWidth={2} />
+                <Text style={s.addNetCompatText}>Unable to verify — RPC request failed</Text>
+              </View>
+              <Text style={s.addNetCompatError}>{compatResult.error}</Text>
+              <VelaButton
+                title="Retry"
+                onPress={() => selectedChainId && handleSelect(selectedChainId)}
+                variant="secondary"
+                style={{ marginTop: space.md }}
+              />
             </VelaCard>
           )}
 
           {compatResult?.compatible && (
             <VelaButton title="Add Network" onPress={handleAdd} variant="accent" loading={saving} style={s.checkBtn} />
           )}
-          {compatResult && !compatResult.compatible && (
+          {compatResult && !compatResult.compatible && !compatResult.rpcFailed && (
             <Text style={s.addNetHint}>
-              This network is not compatible yet. Deploy SafeSingletonFactory first via safe-singleton-factory.
+              This network is not compatible. SafeSingletonFactory needs to be deployed via safe-singleton-factory.
             </Text>
           )}
         </ScrollView>
       </View>
     </AppModal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Text Scale Slider — drag to adjust, snaps to levels, haptic on each snap
+// ---------------------------------------------------------------------------
+
+const SLIDER_STEP_COUNT = TEXT_SCALE_LEVELS.length - 1;
+
+function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
+  s: S; currentIndex: number; onChangeIndex: (index: number) => void;
+}) {
+  const THUMB_SIZE = 28;
+
+  const trackWidth = useSharedValue(0);
+  const thumbX = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const lastSnappedIndex = useSharedValue(currentIndex);
+  const isDragging = useSharedValue(false);
+
+  // Sync thumb position when currentIndex changes externally
+  useEffect(() => {
+    if (!isDragging.value && trackWidth.value > 0) {
+      thumbX.value = withSpring(
+        (currentIndex / SLIDER_STEP_COUNT) * trackWidth.value,
+        { damping: 20, stiffness: 200 },
+      );
+      lastSnappedIndex.value = currentIndex;
+    }
+  }, [currentIndex, isDragging, thumbX, trackWidth, lastSnappedIndex]);
+
+  const snapAndApply = useCallback((index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onChangeIndex(index);
+  }, [onChangeIndex]);
+
+  const pan = Gesture.Pan()
+    .onStart(() => {
+      isDragging.value = true;
+      startX.value = thumbX.value;
+    })
+    .onUpdate((e) => {
+      const w = trackWidth.value;
+      if (w <= 0) return;
+      const raw = Math.max(0, Math.min(w, startX.value + e.translationX));
+      thumbX.value = raw;
+      const nearestIndex = Math.round((raw / w) * SLIDER_STEP_COUNT);
+      if (nearestIndex !== lastSnappedIndex.value) {
+        lastSnappedIndex.value = nearestIndex;
+        runOnJS(snapAndApply)(nearestIndex);
+      }
+    })
+    .onEnd(() => {
+      isDragging.value = false;
+      const w = trackWidth.value;
+      if (w <= 0) return;
+      thumbX.value = withSpring(
+        (lastSnappedIndex.value / SLIDER_STEP_COUNT) * w,
+        { damping: 20, stiffness: 200 },
+      );
+    });
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: thumbX.value - THUMB_SIZE / 2 }],
+  }));
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: thumbX.value,
+  }));
+
+  return (
+    <View style={s.sliderContainer}>
+      <Text style={s.sliderLabelSmall}>A</Text>
+      <View
+        style={s.sliderTrackOuter}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          trackWidth.value = w;
+          thumbX.value = (currentIndex / SLIDER_STEP_COUNT) * w;
+        }}
+      >
+        <View style={s.sliderTrack} />
+        <Animated.View style={[s.sliderFill, fillStyle]} />
+        <View style={s.sliderTicks}>
+          {TEXT_SCALE_LEVELS.map((_, i) => (
+            <View key={i} style={[s.sliderTickDot, i <= currentIndex && s.sliderTickDotActive]} />
+          ))}
+        </View>
+        <GestureDetector gesture={pan}>
+          <Animated.View style={[s.sliderThumb, thumbStyle]} hitSlop={12} />
+        </GestureDetector>
+      </View>
+      <Text style={s.sliderLabelLarge}>A</Text>
+    </View>
   );
 }
 
@@ -501,7 +797,7 @@ export default function SettingsScreen() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [priceSource, setPriceSource] = useState<PriceSource>('api');
   const [publicKeyHex, setPublicKeyHex] = useState('');
-  const { levelIndex: currentScaleIndex, change: changeTextScale } = useTextScale();
+  const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
 
   useEffect(() => { loadPriceSource().then(setPriceSource); }, []);
   useEffect(() => {
@@ -543,22 +839,11 @@ export default function SettingsScreen() {
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
           <Text style={styles.sectionTitle}>GENERAL</Text>
           <VelaCard>
-            <View style={styles.textScaleStepper}>
-              <Pressable style={[styles.textScaleBtn, currentScaleIndex === 0 && styles.textScaleBtnDisabled]}
-                onPress={() => changeTextScale(-1)} disabled={currentScaleIndex === 0}>
-                <Text style={[styles.textScaleBtnText, currentScaleIndex === 0 && styles.textScaleBtnTextDisabled]}>A−</Text>
-              </Pressable>
-              <View style={styles.textScaleTrack}>
-                {TEXT_SCALE_LEVELS.map((_, i) => (
-                  <View key={i} style={[styles.textScaleTick, i <= currentScaleIndex && styles.textScaleTickActive, i === currentScaleIndex && styles.textScaleTickCurrent]} />
-                ))}
-              </View>
-              <Pressable style={[styles.textScaleBtn, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnDisabled]}
-                onPress={() => changeTextScale(1)} disabled={currentScaleIndex === TEXT_SCALE_LEVELS.length - 1}>
-                <Text style={[styles.textScaleBtnText, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnTextDisabled]}>A+</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.textScaleLabel}>{TEXT_SCALE_LEVELS[currentScaleIndex].label}</Text>
+            <TextScaleSlider
+              s={styles}
+              currentIndex={currentScaleIndex}
+              onChangeIndex={setScaleIndex}
+            />
             <View style={styles.settingsRowDividerFull} />
             <View style={styles.priceSourceRow}>
               <Text style={styles.priceSourceLabel}>Price Source</Text>
@@ -646,16 +931,17 @@ const styleFactory = () => ({
   logoutText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
 
   // Text Scale
-  textScaleStepper: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: space.lg, paddingHorizontal: space.xl, gap: space.xl },
-  textScaleBtn: { width: 40, height: 40, borderRadius: radius.full, borderWidth: 1, borderColor: color.border.base, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: color.bg.base },
-  textScaleBtnDisabled: { opacity: 0.3 },
-  textScaleBtnText: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
-  textScaleBtnTextDisabled: { color: color.fg.subtle },
-  textScaleTrack: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, height: 4, backgroundColor: color.border.base, borderRadius: 2, paddingHorizontal: space.sm },
-  textScaleTick: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.border.strong },
-  textScaleTickActive: { backgroundColor: color.accent.base },
-  textScaleTickCurrent: { width: 12, height: 12, borderRadius: 6, backgroundColor: color.accent.base, ...shadow.sm },
-  textScaleLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, textAlign: 'center' as const, paddingBottom: space.lg },
+  // Slider
+  sliderContainer: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space['2xl'], paddingHorizontal: space.xl, gap: space.lg },
+  sliderLabelSmall: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle },
+  sliderLabelLarge: { fontSize: text.xl, ...inter.semibold, color: color.fg.subtle },
+  sliderTrackOuter: { flex: 1, height: 36, justifyContent: 'center' as const },
+  sliderTrack: { position: 'absolute' as const, left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: color.border.base },
+  sliderFill: { position: 'absolute' as const, left: 0, height: 4, borderRadius: 2, backgroundColor: color.accent.base },
+  sliderTicks: { position: 'absolute' as const, left: 0, right: 0, flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
+  sliderTickDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.border.strong },
+  sliderTickDotActive: { backgroundColor: color.accent.base },
+  sliderThumb: { position: 'absolute' as const, top: 4, width: 28, height: 28, borderRadius: 14, backgroundColor: color.bg.raised, borderWidth: 2, borderColor: color.accent.base, ...shadow.md },
 
   // Modal shared
   modalContainer: { flex: 1, backgroundColor: color.bg.base },
@@ -686,6 +972,7 @@ const styleFactory = () => ({
   dividerFull: { height: 1, backgroundColor: color.border.base, marginHorizontal: -space.xl, marginBottom: space.sm },
   deleteNetBtn: { padding: space.sm, marginRight: space.sm },
   configField: { gap: space.sm, marginBottom: space.lg },
+  configLabelRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
   configLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1, textTransform: 'uppercase' as const },
   configInput: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base },
 
@@ -723,7 +1010,16 @@ const styleFactory = () => ({
   loadingText: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
   serviceDisclaimer: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, lineHeight: 20, marginTop: space.xl, textAlign: 'center' as const },
 
-  // Add Network
+  // Add Network — search
+  searchField: { marginBottom: space.md },
+  suggestionsCard: { marginBottom: space.lg, paddingVertical: space.sm },
+  suggestionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space.lg, paddingHorizontal: space.xl },
+  suggestionRowBorder: { borderBottomWidth: 1, borderBottomColor: color.border.base },
+  suggestionInfo: { flex: 1, gap: 2 },
+  suggestionName: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  suggestionMeta: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+
+  // Add Network — results
   checkBtn: { marginTop: space.lg, marginBottom: space.lg },
   addNetError: { fontSize: text.sm, ...inter.medium, color: color.accent.base, marginTop: space.md },
   addNetResult: { padding: space['2xl'], gap: space.sm, marginBottom: space.lg },

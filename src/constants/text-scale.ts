@@ -65,6 +65,8 @@ interface TextScaleContextValue {
   level: TextScaleLevel;
   levelIndex: number;
   change: (delta: number) => void;
+  /** Jump directly to a level index (for slider). */
+  setIndex: (index: number) => void;
 }
 
 const TextScaleContext = createContext<TextScaleContextValue>({
@@ -72,6 +74,7 @@ const TextScaleContext = createContext<TextScaleContextValue>({
   level: DEFAULT_LEVEL,
   levelIndex: TEXT_SCALE_LEVELS.findIndex(l => l.key === DEFAULT_LEVEL),
   change: () => {},
+  setIndex: () => {},
 });
 
 export function useTextScale() {
@@ -109,12 +112,25 @@ export function TextScaleProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, level.key).catch(() => {});
   }, [levelIndex]);
 
+  const setIndex = useCallback((index: number) => {
+    if (index < 0 || index >= TEXT_SCALE_LEVELS.length || index === levelIndex) return;
+    const level = TEXT_SCALE_LEVELS[index];
+    _currentLevel = level.key;
+    _currentFactor = level.factor;
+    const { rebuildTextScale } = require('./theme');
+    rebuildTextScale();
+    setLevelIndex(index);
+    setVersion(v => v + 1);
+    AsyncStorage.setItem(STORAGE_KEY, level.key).catch(() => {});
+  }, [levelIndex]);
+
   const value = useMemo(() => ({
     version,
     level: TEXT_SCALE_LEVELS[levelIndex].key,
     levelIndex,
     change,
-  }), [version, levelIndex, change]);
+    setIndex,
+  }), [version, levelIndex, change, setIndex]);
 
   return React.createElement(TextScaleContext.Provider, { value }, children);
 }

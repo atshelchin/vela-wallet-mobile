@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { useColorScheme, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { WalletProvider } from '@/models/wallet-state';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
@@ -14,20 +15,22 @@ function AppShell() {
   const colorScheme = useColorScheme();
 
   return (
-    <WalletProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="send" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="history" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="about" options={{ presentation: 'modal' }} />
-        </Stack>
-      </ThemeProvider>
-    </WalletProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <WalletProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="send" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="history" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+          </Stack>
+        </ThemeProvider>
+      </WalletProvider>
+    </GestureHandlerRootView>
   );
 }
 
