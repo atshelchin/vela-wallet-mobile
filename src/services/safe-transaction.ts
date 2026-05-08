@@ -168,6 +168,9 @@ async function sendUserOp(
   publicKeyHex: string,
   signFn: SignFn,
 ): Promise<TransactionResult> {
+  // 0. Pre-check: verify critical contracts exist on this chain
+  await verifyChainReady(chainId);
+
   // 1. Check if deployed
   const deployed = await isDeployed(safeAddress, chainId);
 
@@ -689,9 +692,7 @@ async function submitUserOp(
   const result = response.result as string | undefined;
   if (!result) {
     const error = response.error;
-    throw new Error(
-      `Transaction failed: ${error ? JSON.stringify(error) : 'Unknown error'}`,
-    );
+    throw new Error(parseBundlerError(error));
   }
 
   return result;
@@ -779,4 +780,57 @@ function bigintMax(a: bigint, b: bigint): bigint {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Verify that critical contracts are deployed on this chain.
+ * Caches results per chain to avoid repeated checks.
+ */
+const _chainReadyCache = new Map<number, boolean>();
+
+async function verifyChainReady(chainId: number): Promise<void> {
+  if (_chainReadyCache.get(chainId)) return;
+
+  // Check EntryPoint as a quick proxy — if it's there, the chain was set up
+  const entryPointDeployed = await isDeployed(ENTRY_POINT, chainId);
+  if (!entryPointDeployed) {
+    throw new Error(
+      'This network is not ready yet. Required smart contracts (EntryPoint) ' +
+      'are not deployed. Please activate this network in Settings → Transaction Services.',
+    );
+  }
+
+  _chainReadyCache.set(chainId, true);
+}
+
+/** Parse bundler error into a human-readable message. */
+function parseBundlerError(error: any): string {
+  if (!error) return 'Transaction failed: unknown error';
+
+  const msg = error.message ?? error.data ?? '';
+
+  // Common Pimlico / bundler errors
+  if (msg.includes('insufficient funds') || msg.includes('balance too low'))
+    return 'Insufficient balance to cover gas fees. Please fund your account.';
+  if (msg.includes('could not load bundle') || msg.includes('simulation failed'))
+    return 'Transaction simulation failed. The network may be congested or the transaction parameters are invalid. Please try again.';
+  if (msg.includes('AA21') || msg.includes('didn\'t pay prefund'))
+    return 'Insufficient gas funds. The bundler account needs more balance on this network.';
+  if (msg.includes('AA10') || msg.includes('sender already constructed'))
+    return 'Wallet deployment conflict. Please try again.';
+  if (msg.includes('AA13') || msg.includes('initCode failed'))
+    return 'Wallet deployment failed. Required contracts may not be deployed on this network.';
+  if (msg.includes('AA23') || msg.includes('reverted'))
+    return 'Transaction reverted during simulation. Check recipient address and amount.';
+  if (msg.includes('AA25') || msg.includes('invalid account nonce'))
+    return 'Transaction nonce mismatch. Please try again.';
+  if (msg.includes('rate limit') || msg.includes('429'))
+    return 'Bundler rate limit reached. Please wait a moment and try again.';
+
+  // Fallback: show the actual message, cleaned up
+  const cleanMsg = msg.replace(/^execution reverted:\s*/i, '').trim();
+  if (cleanMsg) return `Transaction failed: ${cleanMsg}`;
+
+  // Last resort
+  return `Transaction failed: ${JSON.stringify(error).slice(0, 200)}`;
 }

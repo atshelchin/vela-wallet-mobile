@@ -23,6 +23,8 @@ export interface ChainInfo {
     decimals: number;
   };
   rpcUrl: string;
+  /** All available HTTPS RPC URLs */
+  rpcUrls: string[];
   explorerUrl: string;
   logoURL: string;
   isTestnet: boolean;
@@ -63,6 +65,7 @@ function parseChainData(data: any, chainId: number): ChainInfo {
       decimals: data.nativeCurrency?.decimals ?? 18,
     },
     rpcUrl: extractRpcUrl(data),
+    rpcUrls: extractAllRpcUrls(data),
     explorerUrl: extractExplorerUrl(data),
     logoURL: `${BASE_URL}/chainlogos/eip155-${chainId}.png`,
     isTestnet: data.testnet === true,
@@ -135,6 +138,13 @@ export async function searchChains(query: string): Promise<ChainSearchResult[]> 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function extractAllRpcUrls(data: any): string[] {
+  if (!Array.isArray(data.rpc)) return [];
+  return data.rpc.filter((u: unknown) =>
+    typeof u === 'string' && u.startsWith('https://') && !u.includes('${') && !u.includes('API_KEY')
+  ) as string[];
+}
 
 function extractRpcUrl(data: any): string {
   if (Array.isArray(data.rpc) && data.rpc.length > 0) {

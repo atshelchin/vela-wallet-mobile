@@ -187,12 +187,23 @@ export interface CustomNetwork {
 
 // MARK: - Compatibility Check
 
+export interface ContractStatus {
+  name: string;
+  address: string;
+  deployed: boolean;
+}
+
 export interface CompatibilityResult {
   chainId: number;
-  factoryDeployed: boolean;
-  bytecodeMatch: boolean;
+  /** All required contracts deployed */
   compatible: boolean;
-  /** True when all RPC attempts failed — result is inconclusive, not definitive */
+  /** Individual contract statuses */
+  contracts: ContractStatus[];
+  /** Best RPC URL (lowest latency) */
+  bestRpcUrl?: string;
+  /** Best RPC latency in ms */
+  bestRpcLatency?: number;
+  /** True when all RPC attempts failed — result is inconclusive */
   rpcFailed?: boolean;
   error?: string;
 }

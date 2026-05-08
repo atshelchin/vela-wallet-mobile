@@ -1,164 +1,181 @@
 /**
- * Network compatibility checker.
+ * Network compatibility checker — full gateway for adding networks.
  *
- * Validates the admission condition for new EVM networks:
- * SafeSingletonFactory must be deployed and bytecode must match ETH mainnet.
+ * 1. Collects all available HTTPS RPCs for the chain
+ * 2. Tests latency and picks the fastest one
+ * 3. Checks all 8 required contracts via the best RPC
+ * 4. Returns per-contract status + best RPC recommendation
+ *
+ * Only networks where ALL contracts are deployed can be added.
  */
 
-import type { CompatibilityResult } from '@/models/types';
+import type { CompatibilityResult, ContractStatus } from '@/models/types';
 import { fetchChainInfo } from './chain-registry';
 
+// ---------------------------------------------------------------------------
+// Required contracts (from safe-address.ts)
+// ---------------------------------------------------------------------------
+
+const REQUIRED_CONTRACTS: { name: string; address: string }[] = [
+  { name: 'Safe Singleton',          address: '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762' },
+  { name: 'Safe Proxy Factory',      address: '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67' },
+  { name: 'EntryPoint v0.7',         address: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' },
+  { name: 'Safe 4337 Module',        address: '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226' },
+  { name: 'Safe Module Setup',       address: '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47' },
+  { name: 'WebAuthn Signer',         address: '0x94a4F6affBd8975951142c3999aEAB7ecee555c2' },
+  { name: 'Fallback Handler',        address: '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99' },
+  { name: 'MultiSend',               address: '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526' },
+];
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /**
- * Safe Singleton Factory — the canonical deterministic deployer used by Safe.
- * See: https://github.com/safe-global/safe-singleton-factory
+ * Full compatibility check for adding a new network.
  *
- * Note: 0xE1CB04A0fA36DdD16a06ea828007E35e1a3cBC37 (referenced in v1.0.0 doc)
- * is a one-time-use CREATE2 deployer that self-destructs after deployment.
- * The persistent factory is at 0x914d... which remains on-chain after use.
- */
-const SAFE_SINGLETON_FACTORY = '0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7';
-
-/**
- * Expected runtime bytecode of the Safe Singleton Factory (69 bytes).
- * Small enough to compare directly — no hashing needed.
- * Source: eth_getCode on ETH mainnet at 0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7
- */
-const EXPECTED_BYTECODE = '0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3';
-
-/**
- * Well-known public RPCs to try when the chain-provided RPC fails.
- */
-const FALLBACK_RPCS: Record<number, string[]> = {
-  1284: ['https://rpc.api.moonbeam.network', 'https://moonbeam-rpc.publicnode.com', 'https://1rpc.io/glmr'],
-  1285: ['https://rpc.api.moonriver.moonbeam.network'],
-};
-
-/**
- * Check if a network is compatible with Vela Wallet.
- *
- * Tries the provided rpcURL first, then falls back to alternative RPCs
- * from the chain registry and hardcoded fallbacks.
+ * @param rpcURLs - One or more HTTPS RPC URLs to test
+ * @param chainId - Target chain ID
  */
 export async function checkNetworkCompatibility(
-  rpcURL: string,
+  rpcURLs: string[],
   chainId: number,
 ): Promise<CompatibilityResult> {
-  // Build list of RPCs to try
-  const rpcsToTry = [rpcURL];
+  // 1. Collect all candidate RPCs
+  const candidates = [...new Set(rpcURLs.filter(u => u && u.startsWith('https://')))];
 
-  // Add fallback RPCs for known chains
-  const fallbacks = FALLBACK_RPCS[chainId];
-  if (fallbacks) {
-    for (const fb of fallbacks) {
-      if (!rpcsToTry.includes(fb)) rpcsToTry.push(fb);
-    }
-  }
-
-  // Try to get more RPCs from chain registry
+  // Add RPCs from chain registry
   try {
-    const chainInfo = await fetchChainInfo(chainId);
-    if (chainInfo?.rpcUrl && !rpcsToTry.includes(chainInfo.rpcUrl)) {
-      rpcsToTry.push(chainInfo.rpcUrl);
+    const info = await fetchChainInfo(chainId);
+    if (info?.rpcUrl && !candidates.includes(info.rpcUrl)) {
+      candidates.push(info.rpcUrl);
     }
   } catch {}
 
-  let lastError = '';
-
-  for (const rpc of rpcsToTry) {
-    if (!rpc || !rpc.startsWith('http')) continue;
-
-    console.log(`[NetworkChecker] Trying RPC: ${rpc} for chain ${chainId}`);
-    const result = await tryRpc(rpc, chainId);
-
-    if (result.error) {
-      console.log(`[NetworkChecker] RPC failed: ${rpc} — ${result.error}`);
-      lastError = result.error;
-      continue;
-    }
-
-    return result;
+  if (candidates.length === 0) {
+    return {
+      chainId,
+      compatible: false,
+      contracts: REQUIRED_CONTRACTS.map(c => ({ ...c, deployed: false })),
+      rpcFailed: true,
+      error: 'No valid HTTPS RPC endpoints available',
+    };
   }
+
+  // 2. Test all RPCs in parallel, pick the fastest responding one
+  console.log(`[NetworkChecker] Testing ${candidates.length} RPCs for chain ${chainId}`);
+  const best = await pickFastestRpc(candidates, chainId);
+
+  if (!best) {
+    return {
+      chainId,
+      compatible: false,
+      contracts: REQUIRED_CONTRACTS.map(c => ({ ...c, deployed: false })),
+      rpcFailed: true,
+      error: 'All RPC endpoints failed or timed out',
+    };
+  }
+
+  console.log(`[NetworkChecker] Best RPC: ${best.url} (${best.latencyMs}ms)`);
+
+  // 3. Check all required contracts via the best RPC
+  const contracts = await checkAllContracts(best.url);
+
+  const allDeployed = contracts.every(c => c.deployed);
+  const missing = contracts.filter(c => !c.deployed);
 
   return {
     chainId,
-    factoryDeployed: false,
-    bytecodeMatch: false,
-    compatible: false,
-    rpcFailed: true,
-    error: lastError || 'All RPC endpoints failed',
+    compatible: allDeployed,
+    contracts,
+    bestRpcUrl: best.url,
+    bestRpcLatency: best.latencyMs,
+    error: allDeployed
+      ? undefined
+      : `${missing.length} contract${missing.length > 1 ? 's' : ''} not deployed: ${missing.map(c => c.name).join(', ')}`,
   };
 }
 
-async function tryRpc(rpcURL: string, chainId: number): Promise<CompatibilityResult> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+// ---------------------------------------------------------------------------
+// RPC latency test
+// ---------------------------------------------------------------------------
 
-    const response = await fetch(rpcURL, {
+interface RpcTestResult {
+  url: string;
+  latencyMs: number;
+}
+
+async function testRpcLatency(url: string): Promise<RpcTestResult | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  const start = Date.now();
+
+  try {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_getCode',
-        params: [SAFE_SINGLETON_FACTORY, 'latest'],
-      }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
       signal: controller.signal,
     });
-
     clearTimeout(timeout);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.result) return null;
+    return { url, latencyMs: Date.now() - start };
+  } catch {
+    clearTimeout(timeout);
+    return null;
+  }
+}
 
-    if (!response.ok) {
-      return {
-        chainId,
-        factoryDeployed: false,
-        bytecodeMatch: false,
-        compatible: false,
-        error: `HTTP ${response.status}`,
-      };
-    }
+async function pickFastestRpc(urls: string[], chainId: number): Promise<RpcTestResult | null> {
+  const results = await Promise.allSettled(urls.map(u => testRpcLatency(u)));
+  const valid: RpcTestResult[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) valid.push(r.value);
+  }
+  if (valid.length === 0) return null;
+  valid.sort((a, b) => a.latencyMs - b.latencyMs);
+  return valid[0];
+}
 
-    const json = await response.json();
+// ---------------------------------------------------------------------------
+// Contract deployment check
+// ---------------------------------------------------------------------------
 
-    if (json.error) {
-      return {
-        chainId,
-        factoryDeployed: false,
-        bytecodeMatch: false,
-        compatible: false,
-        error: json.error.message ?? 'RPC error',
-      };
-    }
+async function checkAllContracts(rpcUrl: string): Promise<ContractStatus[]> {
+  // Batch all eth_getCode calls in parallel
+  const results = await Promise.allSettled(
+    REQUIRED_CONTRACTS.map(async (contract) => {
+      const deployed = await checkCode(rpcUrl, contract.address);
+      return { ...contract, deployed };
+    }),
+  );
 
-    const bytecode = json.result as string | undefined;
+  return results.map((r, i) => {
+    if (r.status === 'fulfilled') return r.value;
+    return { ...REQUIRED_CONTRACTS[i], deployed: false };
+  });
+}
 
-    if (!bytecode || bytecode === '0x' || bytecode.length <= 2) {
-      return {
-        chainId,
-        factoryDeployed: false,
-        bytecodeMatch: false,
-        compatible: false,
-        error: 'SafeSingletonFactory not deployed on this network',
-      };
-    }
+async function checkCode(rpcUrl: string, address: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const bytecodeMatch = bytecode.toLowerCase() === EXPECTED_BYTECODE.toLowerCase();
-
-    return {
-      chainId,
-      factoryDeployed: true,
-      bytecodeMatch,
-      compatible: bytecodeMatch,
-      error: bytecodeMatch ? undefined : 'Bytecode does not match ETH mainnet SafeSingletonFactory',
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Network unreachable';
-    return {
-      chainId,
-      factoryDeployed: false,
-      bytecodeMatch: false,
-      compatible: false,
-      error: msg.includes('abort') ? 'Request timed out (15s)' : msg,
-    };
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getCode', params: [address, 'latest'] }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return false;
+    const json = await res.json();
+    const code = json.result as string | undefined;
+    return !!code && code !== '0x' && code.length > 4;
+  } catch {
+    clearTimeout(timeout);
+    return false;
   }
 }

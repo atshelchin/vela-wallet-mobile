@@ -14,19 +14,22 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
+import { QRCode } from '@/components/QRCode';
 import { color, text, inter, space, radius, font, shadow, useStyles } from '@/constants/theme';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, loadPriceSource, savePriceSource, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, findAccountByCredentialId } from '@/services/storage';
-import { getAddresses, getAllNetworkFunding } from '@/services/deployer-api';
+import { getAddresses, getAllNetworkFunding, estimateDeployerCost, buildDeployChallenge, requestDeployment, waitForDeployment } from '@/services/deployer-api';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Fuel, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, PriceSource, BundlerDeployerInfo, NetworkFundingStatus, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import { nativeSymbol } from '@/models/network';
+import * as Passkey from '@/modules/passkey';
+import { toHex } from '@/services/hex';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -461,7 +464,8 @@ function BundlerDeployerModal({ s, visible, onClose, publicKeyHex }: { s: S; vis
 // Add Network Modal
 // ---------------------------------------------------------------------------
 
-function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void }) {
+function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void; publicKeyHex: string }) {
+  const { activeAccount } = useWallet();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<ChainSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -471,6 +475,11 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
   const [compatResult, setCompatResult] = useState<CompatibilityResult | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deploying, setDeploying] = useState<string | null>(null);
+  const [fundingInfo, setFundingInfo] = useState<{
+    address: string; chainName: string; symbol: string;
+    balance: string; required: string; shortfall: string; gasPriceGwei: string;
+  } | null>(null);
   const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reset = () => {
@@ -522,8 +531,9 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
       setChainInfo(info);
       setQuery(info.name);
 
-      if (info.rpcUrl) {
-        const compat = await checkNetworkCompatibility(info.rpcUrl, chainId);
+      if (info.rpcUrls.length > 0 || info.rpcUrl) {
+        const rpcs = info.rpcUrls.length > 0 ? info.rpcUrls : [info.rpcUrl];
+        const compat = await checkNetworkCompatibility(rpcs, chainId);
         setCompatResult(compat);
       } else {
         setError('No RPC endpoint available for this network');
@@ -531,6 +541,63 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
     } catch (e: any) {
       setError(e.message ?? 'Check failed');
     } finally { setLoading(false); }
+  };
+
+  // Deploy a missing contract
+  const handleDeploy = async (contractName: string, contractAddress: string) => {
+    if (!chainInfo || !compatResult?.bestRpcUrl || !activeAccount) return;
+    setDeploying(contractAddress);
+    setError('');
+    try {
+      // 1. Check deployer balance
+      const addr = await getAddresses(publicKeyHex);
+      const missingAddresses = compatResult.contracts.filter(c => !c.deployed).map(c => c.address);
+      const cost = await estimateDeployerCost(addr.deployerAddress, chainInfo.chainId, missingAddresses);
+      if (!cost.sufficient) {
+        setFundingInfo({
+          address: addr.deployerAddress,
+          chainName: chainInfo.name,
+          symbol: chainInfo.nativeCurrency.symbol,
+          balance: cost.balanceFormatted,
+          required: cost.requiredFormatted,
+          shortfall: cost.shortfallFormatted,
+          gasPriceGwei: cost.gasPriceGwei,
+        });
+        setDeploying(null);
+        return;
+      }
+
+      // 2. Build challenge and sign with passkey
+      const { challengeHex } = buildDeployChallenge(chainInfo.chainId, contractAddress);
+      const assertion = await Passkey.sign(challengeHex, activeAccount.id);
+
+      // 3. Submit deployment request
+      const result = await requestDeployment({
+        chainId: chainInfo.chainId,
+        rpcUrl: compatResult.bestRpcUrl,
+        contractName,
+        contractAddress,
+        credentialId: activeAccount.id,
+        signatureHex: assertion.signatureHex,
+        challengeHex,
+      });
+
+      // 4. Wait for confirmation
+      const confirmed = await waitForDeployment(result.txHash, compatResult.bestRpcUrl);
+      if (confirmed) {
+        // Re-check all contracts
+        const rpcs = chainInfo.rpcUrls.length > 0 ? chainInfo.rpcUrls : [chainInfo.rpcUrl];
+        const compat = await checkNetworkCompatibility(rpcs, chainInfo.chainId);
+        setCompatResult(compat);
+      } else {
+        setError(`Deployment of ${contractName} failed on-chain.`);
+      }
+    } catch (e: any) {
+      if (e?.code === 'PASSKEY_CANCELLED') { /* user cancelled */ }
+      else setError(e.message ?? 'Deployment failed');
+    } finally {
+      setDeploying(null);
+    }
   };
 
   const handleAdd = async () => {
@@ -546,7 +613,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
         iconBg: '#F0F0F0',
         logoURL: chainInfo.logoURL,
         isL2: false,
-        rpcURL: chainInfo.rpcUrl,
+        rpcURL: compatResult.bestRpcUrl ?? chainInfo.rpcUrl, // Use the fastest RPC
         explorerURL: chainInfo.explorerUrl,
         bundlerURL: '',
         nativeSymbol: chainInfo.nativeCurrency.symbol,
@@ -630,29 +697,46 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
               <Text style={s.addNetResultName}>{chainInfo.name}</Text>
               <Text style={s.addNetResultDetail}>Chain ID: {chainInfo.chainId}</Text>
               <Text style={s.addNetResultDetail}>Native: {chainInfo.nativeCurrency.symbol}</Text>
-              {chainInfo.rpcUrl ? <Text style={s.addNetResultDetail} numberOfLines={1}>RPC: {chainInfo.rpcUrl}</Text> : null}
-              {chainInfo.explorerUrl ? <Text style={s.addNetResultDetail} numberOfLines={1}>Explorer: {chainInfo.explorerUrl}</Text> : null}
               {chainInfo.isTestnet && <Text style={s.addNetTestnet}>Testnet</Text>}
             </VelaCard>
           )}
 
-          {/* Compatibility result */}
-          {compatResult && !compatResult.rpcFailed && (
+          {/* Best RPC info */}
+          {compatResult?.bestRpcUrl && (
             <VelaCard style={s.addNetCompat}>
               <View style={s.addNetCompatRow}>
-                {compatResult.factoryDeployed
-                  ? <CheckCircle2 size={16} color={color.success.base} strokeWidth={2} />
-                  : <XCircle size={16} color={color.accent.base} strokeWidth={2} />}
-                <Text style={s.addNetCompatText}>SafeSingletonFactory {compatResult.factoryDeployed ? 'deployed' : 'not deployed'}</Text>
+                <CheckCircle2 size={16} color={color.success.base} strokeWidth={2} />
+                <Text style={s.addNetCompatText}>Best RPC: {compatResult.bestRpcLatency}ms</Text>
               </View>
-              {compatResult.factoryDeployed && (
-                <View style={s.addNetCompatRow}>
-                  {compatResult.bytecodeMatch
-                    ? <CheckCircle2 size={16} color={color.success.base} strokeWidth={2} />
-                    : <XCircle size={16} color={color.accent.base} strokeWidth={2} />}
-                  <Text style={s.addNetCompatText}>Bytecode {compatResult.bytecodeMatch ? 'matches' : 'does not match'} ETH mainnet</Text>
+              <Text style={s.addNetCompatDetail} numberOfLines={1}>{compatResult.bestRpcUrl}</Text>
+            </VelaCard>
+          )}
+
+          {/* Per-contract status */}
+          {compatResult && !compatResult.rpcFailed && (
+            <VelaCard style={s.addNetCompat}>
+              <Text style={s.addNetCompatTitle}>Required Contracts</Text>
+              {compatResult.contracts.map((c) => (
+                <View key={c.address} style={s.contractRow}>
+                  <View style={s.contractStatusRow}>
+                    {c.deployed
+                      ? <CheckCircle2 size={14} color={color.success.base} strokeWidth={2} />
+                      : <XCircle size={14} color={color.accent.base} strokeWidth={2} />}
+                    <Text style={[s.addNetCompatText, !c.deployed && s.addNetCompatMissing]}>{c.name}</Text>
+                  </View>
+                  {!c.deployed && (
+                    <Pressable
+                      style={s.deployBtn}
+                      onPress={() => handleDeploy(c.name, c.address)}
+                      disabled={deploying !== null}
+                    >
+                      {deploying === c.address
+                        ? <ActivityIndicator size={12} color={color.accent.base} />
+                        : <Text style={s.deployBtnText}>Deploy</Text>}
+                    </Pressable>
+                  )}
                 </View>
-              )}
+              ))}
             </VelaCard>
           )}
 
@@ -677,11 +761,66 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
             <VelaButton title="Add Network" onPress={handleAdd} variant="accent" loading={saving} style={s.checkBtn} />
           )}
           {compatResult && !compatResult.compatible && !compatResult.rpcFailed && (
-            <Text style={s.addNetHint}>
-              This network is not compatible. SafeSingletonFactory needs to be deployed via safe-singleton-factory.
-            </Text>
+            <View>
+              <Text style={s.addNetHint}>
+                Deploy missing contracts to enable this network. Requires Deployer funding.
+              </Text>
+              <VelaButton
+                title="Re-check"
+                onPress={() => selectedChainId && handleSelect(selectedChainId)}
+                variant="secondary"
+                style={s.checkBtn}
+              />
+            </View>
           )}
         </ScrollView>
+
+        {/* Deployer Funding Modal */}
+        {fundingInfo && (
+          <View style={s.fundOverlay}>
+            <Pressable style={s.fundBackdrop} onPress={() => setFundingInfo(null)} />
+            <View style={s.fundSheet}>
+              <View style={s.fundHeader}>
+                <Text style={s.fundTitle}>Fund Deployer</Text>
+                <Pressable onPress={() => setFundingInfo(null)} hitSlop={8}><X size={20} color={color.fg.base} strokeWidth={2} /></Pressable>
+              </View>
+              <ScrollView contentContainerStyle={s.fundContent}>
+                <Text style={s.fundDescription}>
+                  Send at least <Text style={s.fundBold}>{fundingInfo.shortfall} {fundingInfo.symbol}</Text> on <Text style={s.fundBold}>{fundingInfo.chainName}</Text> to deploy contracts.
+                </Text>
+                <View style={s.fundInfoGrid}>
+                  <View style={s.fundInfoItem}>
+                    <Text style={s.fundInfoLabel}>Current Balance</Text>
+                    <Text style={s.fundInfoValue}>{fundingInfo.balance} {fundingInfo.symbol}</Text>
+                  </View>
+                  <View style={s.fundInfoItem}>
+                    <Text style={s.fundInfoLabel}>Required (2x buffer)</Text>
+                    <Text style={s.fundInfoValue}>{fundingInfo.required} {fundingInfo.symbol}</Text>
+                  </View>
+                  <View style={s.fundInfoItem}>
+                    <Text style={s.fundInfoLabel}>Gas Price</Text>
+                    <Text style={s.fundInfoValue}>{fundingInfo.gasPriceGwei} Gwei</Text>
+                  </View>
+                </View>
+                <View style={s.fundQrWrap}>
+                  <QRCode value={fundingInfo.address} size={180} />
+                </View>
+                <Pressable
+                  style={s.fundAddressBox}
+                  onPress={async () => {
+                    const Clipboard = await import('expo-clipboard');
+                    await Clipboard.setStringAsync(fundingInfo.address);
+                    Alert.alert('Copied', 'Deployer address copied to clipboard');
+                  }}
+                >
+                  <Text style={s.fundAddress}>{fundingInfo.address}</Text>
+                  <Text style={s.fundCopyHint}>Tap to copy</Text>
+                </Pressable>
+                <VelaButton title="Done" onPress={() => setFundingInfo(null)} style={s.fundDoneBtn} />
+              </ScrollView>
+            </View>
+          </View>
+        )}
       </View>
     </AppModal>
   );
@@ -901,7 +1040,7 @@ export default function SettingsScreen() {
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <BundlerDeployerModal s={styles} visible={showBundlerDeployer} onClose={() => setShowBundlerDeployer(false)} publicKeyHex={publicKeyHex} />
-      <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
+      <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} publicKeyHex={publicKeyHex} />
     </ScreenContainer>
   );
 }
@@ -1027,8 +1166,34 @@ const styleFactory = () => ({
   addNetResultDetail: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   addNetTestnet: { fontSize: text.xs, ...inter.semibold, color: '#E8A317', backgroundColor: '#FFF8E1', paddingHorizontal: space.md, paddingVertical: 2, borderRadius: radius.sm, alignSelf: 'flex-start' as const },
   addNetCompat: { padding: space.xl, gap: space.md, marginBottom: space.lg },
-  addNetCompatRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md },
+  addNetCompatTitle: { fontSize: text.sm, ...inter.bold, color: color.fg.base, marginBottom: space.sm },
+  contractRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: 4 },
+  contractStatusRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, flex: 1 },
+  deployBtn: { backgroundColor: color.accent.soft, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.md },
+  deployBtnText: { fontSize: text.xs, ...inter.semibold, color: color.accent.base },
+  addNetCompatRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, paddingVertical: 3 },
   addNetCompatText: { fontSize: text.sm, ...inter.medium, color: color.fg.base },
+  addNetCompatMissing: { color: color.accent.base },
+  addNetCompatDetail: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle, marginTop: 2, marginLeft: 30 },
   addNetCompatError: { fontSize: text.sm, ...inter.regular, color: color.accent.base, marginTop: space.sm },
   addNetHint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
+
+  // Deployer Funding Modal
+  fundOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' as const },
+  fundBackdrop: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
+  fundSheet: { backgroundColor: color.bg.base, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' as unknown as number },
+  fundHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: space['2xl'], paddingVertical: space.xl, borderBottomWidth: 1, borderBottomColor: color.border.base },
+  fundTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  fundContent: { alignItems: 'center' as const, padding: space['2xl'], paddingBottom: space['5xl'] },
+  fundDescription: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 22, marginBottom: space['2xl'] },
+  fundBold: { ...inter.semibold, color: color.fg.base },
+  fundQrWrap: { padding: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, marginBottom: space['2xl'], ...shadow.sm },
+  fundAddressBox: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.xl, alignSelf: 'stretch' as const, alignItems: 'center' as const, gap: space.xs, marginBottom: space['2xl'] },
+  fundAddress: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base, textAlign: 'center' as const },
+  fundCopyHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
+  fundInfoGrid: { alignSelf: 'stretch' as const, backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.xl, gap: space.md, marginBottom: space['2xl'] },
+  fundInfoItem: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
+  fundInfoLabel: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  fundInfoValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
+  fundDoneBtn: { alignSelf: 'stretch' as const },
 });
