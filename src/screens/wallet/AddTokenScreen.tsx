@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ScrollView, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
+import { ChainLogo } from '@/components/ChainLogo';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { getAllNetworksSync } from '@/models/network';
+import type { Network } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
-import { Check, ArrowLeft } from 'lucide-react-native';
+import { Check, ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -52,6 +54,94 @@ async function ethCall(rpcUrl: string, to: string, data: string): Promise<string
   return json.result;
 }
 
+// ---------------------------------------------------------------------------
+// Network Picker — searchable dropdown
+// ---------------------------------------------------------------------------
+
+function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n: Network) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const allNetworks = getAllNetworksSync();
+  const filtered = search.trim()
+    ? allNetworks.filter(n =>
+        n.displayName.toLowerCase().includes(search.toLowerCase()) ||
+        n.iconLabel.toLowerCase().includes(search.toLowerCase()) ||
+        String(n.chainId).includes(search)
+      )
+    : allNetworks;
+
+  return (
+    <View>
+      {/* Selected network button */}
+      <Pressable style={styles.pickerButton} onPress={() => setOpen(!open)}>
+        <ChainLogo label={selected.iconLabel} color={selected.iconColor} bgColor={selected.iconBg} logoURL={selected.logoURL} size={28} />
+        <Text style={styles.pickerButtonText}>{selected.displayName}</Text>
+        <Text style={styles.pickerChainId}>Chain {selected.chainId}</Text>
+        <ChevronDown size={16} color={color.fg.subtle} style={open ? { transform: [{ rotate: '180deg' }] } : undefined} />
+      </Pressable>
+
+      {/* Dropdown */}
+      {open && (
+        <VelaCard style={styles.pickerDropdown}>
+          {/* Search */}
+          {allNetworks.length > 5 && (
+            <View style={styles.pickerSearchRow}>
+              <Search size={14} color={color.fg.subtle} strokeWidth={2} />
+              <TextInput
+                style={styles.pickerSearchInput}
+                placeholder="Search network..."
+                placeholderTextColor={color.fg.subtle}
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {search ? (
+                <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                  <X size={14} color={color.fg.subtle} />
+                </Pressable>
+              ) : null}
+            </View>
+          )}
+
+          {/* Network list */}
+          <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {filtered.map((network, index) => {
+              const isSelected = network.chainId === selected.chainId;
+              return (
+                <Pressable
+                  key={network.id}
+                  style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                  onPress={() => {
+                    onSelect(network);
+                    setOpen(false);
+                    setSearch('');
+                  }}
+                >
+                  <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={24} />
+                  <View style={styles.pickerItemInfo}>
+                    <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]}>{network.displayName}</Text>
+                    <Text style={styles.pickerItemChainId}>Chain {network.chainId}</Text>
+                  </View>
+                  {isSelected && <Check size={16} color={color.accent.base} strokeWidth={2.5} />}
+                </Pressable>
+              );
+            })}
+            {filtered.length === 0 && (
+              <Text style={styles.pickerEmpty}>No networks match "{search}"</Text>
+            )}
+          </ScrollView>
+        </VelaCard>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
 export default function AddTokenScreen() {
   const router = useRouter();
 
@@ -61,7 +151,7 @@ export default function AddTokenScreen() {
   const [tokenMeta, setTokenMeta] = useState<{ name: string; symbol: string; decimals: number } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId);
+  const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId) ?? getAllNetworksSync()[0];
 
   const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(contractAddress);
 
@@ -123,7 +213,7 @@ export default function AddTokenScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Nav bar */}
         <View style={styles.navBar}>
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
@@ -133,32 +223,12 @@ export default function AddTokenScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        {/* Chain selector */}
+        {/* Network selector */}
         <Text style={styles.fieldLabel}>Network</Text>
-        <VelaCard style={styles.chainCard}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chainScroll}>
-            {getAllNetworksSync().map((network) => {
-              const isSelected = network.chainId === selectedChainId;
-              return (
-                <Pressable
-                  key={network.id}
-                  style={[styles.chainChip, isSelected && styles.chainChipSelected]}
-                  onPress={() => {
-                    setSelectedChainId(network.chainId);
-                    setTokenMeta(null);
-                  }}
-                >
-                  <View style={[styles.chainDot, { backgroundColor: network.iconColor }]} />
-                  <Text
-                    style={[styles.chainChipText, isSelected && styles.chainChipTextSelected]}
-                  >
-                    {network.displayName}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </VelaCard>
+        <NetworkPicker
+          selected={selectedNetwork}
+          onSelect={(n) => { setSelectedChainId(n.chainId); setTokenMeta(null); }}
+        />
 
         {/* Contract address input */}
         <Text style={styles.fieldLabel}>Contract Address</Text>
@@ -260,39 +330,90 @@ const styles = createStyles(() => ({
     marginBottom: space.md,
     marginTop: space['2xl'],
   },
-  chainCard: {
-    padding: space.sm,
-  },
-  chainScroll: {
-    gap: space.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.md,
-  },
-  chainChip: {
+
+  // Network Picker
+  pickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: space.lg,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: color.border.base,
     paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
-    borderRadius: radius.full,
-    backgroundColor: color.bg.sunken,
+    paddingVertical: space.xl,
   },
-  chainChipSelected: {
-    backgroundColor: color.fg.base,
-  },
-  chainDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  chainChipText: {
-    fontSize: text.sm,
+  pickerButtonText: {
+    flex: 1,
+    fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
   },
-  chainChipTextSelected: {
-    color: color.fg.inverse,
+  pickerChainId: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
+  pickerDropdown: {
+    marginTop: space.md,
+    overflow: 'hidden',
+  },
+  pickerSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.base,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.base,
+    paddingVertical: space.sm,
+  },
+  pickerList: {
+    maxHeight: 280,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+  },
+  pickerItemSelected: {
+    backgroundColor: color.accent.soft,
+  },
+  pickerItemInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  pickerItemName: {
+    fontSize: text.base,
+    ...inter.medium,
+    color: color.fg.base,
+  },
+  pickerItemNameSelected: {
+    ...inter.semibold,
+    color: color.accent.base,
+  },
+  pickerItemChainId: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
+  },
+  pickerEmpty: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.muted,
+    textAlign: 'center',
+    paddingVertical: space['2xl'],
+  },
+
+  // Input
   input: {
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
