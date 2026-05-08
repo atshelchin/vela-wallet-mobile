@@ -225,7 +225,7 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
             const isActive = index === state.activeAccountIndex;
             return (
               <Pressable key={account.id} style={[s.accountItem, isActive && s.accountItemActive]}
-                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); onClose(); }}>
+                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onClose(); }}>
                 <View style={s.accountAvatar}>
                   <Text style={s.accountAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
                 </View>

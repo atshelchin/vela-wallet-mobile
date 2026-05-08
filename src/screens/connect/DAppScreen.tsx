@@ -19,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
+import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -459,7 +460,7 @@ export default function DAppScreen() {
                 <Pressable
                   key={account.id}
                   style={[styles.accountItem, isActive && styles.accountItemActive]}
-                  onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); setShowAccountPicker(false); }}
+                  onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); setShowAccountPicker(false); }}
                 >
                   <View style={styles.accountItemInfo}>
                     <Text style={styles.accountItemName}>{account.name}</Text>

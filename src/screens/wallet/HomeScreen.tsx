@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -341,6 +342,7 @@ export default function HomeScreen() {
                   style={[styles.switcherItem, isActive && styles.switcherItemActive]}
                   onPress={() => {
                     dispatch({ type: 'SWITCH_ACCOUNT', index });
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     setShowAccountSwitcher(false);
                   }}
                 >
