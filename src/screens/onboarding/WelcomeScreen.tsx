@@ -5,9 +5,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  FadeIn,
-  FadeInUp,
 } from 'react-native-reanimated';
+import { fadeIn, fadeInUp } from '@/constants/entering';
 import { color, text, weight, space, radius, motion, createStyles } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -52,19 +51,19 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) 
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.logoSection}>
-          <Animated.View entering={FadeIn.delay(200).duration(600)}>
+          <Animated.View entering={fadeIn(200, 600)}>
             <Text style={styles.logo}>
               vel<Text style={styles.logoAccent}>a</Text>
             </Text>
           </Animated.View>
-          <Animated.View entering={FadeIn.delay(500).duration(600)}>
+          <Animated.View entering={fadeIn(500, 600)}>
             <Text style={styles.tagline}>
               Your keys, your coins.{'\n'}Simple as a tap.
             </Text>
           </Animated.View>
         </View>
 
-        <Animated.View style={styles.buttonSection} entering={FadeInUp.delay(700).duration(500)}>
+        <Animated.View style={styles.buttonSection} entering={fadeInUp(700, 500)}>
           <AnimatedButton onPress={onCreateWallet} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>Create Wallet</Text>
           </AnimatedButton>

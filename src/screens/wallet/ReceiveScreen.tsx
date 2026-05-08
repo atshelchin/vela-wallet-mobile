@@ -8,9 +8,8 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
-  FadeIn,
-  FadeInDown,
 } from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -127,7 +126,7 @@ export default function ReceiveScreen() {
         </View>
 
         {/* QR Card */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <Animated.View entering={fadeInDown(100, 400)}>
           <VelaCard elevated style={styles.qrCard}>
             <View style={styles.qrContainer}>
               {address ? (
@@ -148,14 +147,14 @@ export default function ReceiveScreen() {
 
             {/* Status indicator */}
             {isListening && !depositDetected && (
-              <Animated.View style={styles.listeningRow} entering={FadeIn.duration(300)}>
+              <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
                 <PulsingDot />
                 <Text style={styles.listeningText}>Listening for deposits</Text>
               </Animated.View>
             )}
 
             {depositDetected && (
-              <Animated.View style={styles.depositAlert} entering={FadeIn.duration(300)}>
+              <Animated.View style={styles.depositAlert} entering={fadeIn(0, 300)}>
                 <Check size={16} color={color.success.base} strokeWidth={3} />
                 <Text style={styles.depositText}>Deposit received!</Text>
               </Animated.View>
@@ -164,7 +163,7 @@ export default function ReceiveScreen() {
         </Animated.View>
 
         {/* Action buttons */}
-        <Animated.View style={styles.buttonRow} entering={FadeInDown.delay(200).duration(400)}>
+        <Animated.View style={styles.buttonRow} entering={fadeInDown(200, 400)}>
           <VelaButton
             title="Copy Address"
             onPress={copyAddress}
@@ -179,7 +178,7 @@ export default function ReceiveScreen() {
         </Animated.View>
 
         {/* Supported networks */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+        <Animated.View entering={fadeInDown(300, 400)}>
           <Text style={styles.sectionTitle}>Supported Networks</Text>
           <Text style={styles.sectionSubtitle}>
             Same address across all EVM networks

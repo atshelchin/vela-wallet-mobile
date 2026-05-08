@@ -7,9 +7,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  FadeIn,
-  FadeInDown,
 } from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenRow } from '@/components/ui/TokenRow';
@@ -172,7 +171,7 @@ export default function HomeScreen() {
   const renderHeader = () => (
     <View style={styles.header}>
       {/* Account chip */}
-      <Animated.View entering={FadeIn.duration(400)}>
+      <Animated.View entering={fadeIn(0, 400)}>
         <Pressable style={styles.accountChip} onPress={copyAddress}>
           <View style={styles.accountAvatar}>
             <Text style={styles.accountAvatarText}>
@@ -194,7 +193,7 @@ export default function HomeScreen() {
       </Animated.View>
 
       {/* Hero balance */}
-      <Animated.View style={styles.balanceSection} entering={FadeInDown.delay(100).duration(500)}>
+      <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
         <Text style={styles.balanceLabel}>Total Balance</Text>
         <View style={styles.balanceRow}>
           <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
@@ -207,7 +206,7 @@ export default function HomeScreen() {
       </Animated.View>
 
       {/* Action buttons */}
-      <Animated.View style={styles.actionRow} entering={FadeInDown.delay(200).duration(400)}>
+      <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
         <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
         <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
         <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />

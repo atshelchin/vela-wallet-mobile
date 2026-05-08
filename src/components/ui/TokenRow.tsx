@@ -4,8 +4,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  FadeIn,
 } from 'react-native-reanimated';
+import { fadeIn } from '@/constants/entering';
 import { TokenLogo } from '@/components/TokenLogo';
 import { color, text, weight, space, radius, font, motion, createStyles } from '@/constants/theme';
 
@@ -37,7 +37,7 @@ export function TokenRow({ symbol, chainLabel, logoUrl, balance, usdValue, onPre
   }, [scale]);
 
   return (
-    <Animated.View entering={FadeIn.delay(index * 40).duration(300)}>
+    <Animated.View entering={fadeIn(index * 40, 300)}>
       <AnimatedPressable
         onPress={onPress}
         onPressIn={handlePressIn}

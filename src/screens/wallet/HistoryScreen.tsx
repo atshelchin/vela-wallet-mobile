@@ -8,7 +8,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -177,7 +178,7 @@ export default function HistoryScreen() {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+      <Animated.View entering={fadeInDown(100, 400)}>
         <VelaCard elevated style={styles.emptyCard}>
           <View style={styles.emptyIconWrap}>
             <ExternalLink size={28} color={color.fg.subtle} />
@@ -196,7 +197,7 @@ export default function HistoryScreen() {
       </Animated.View>
 
       {/* Network Selector */}
-      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+      <Animated.View entering={fadeInDown(200, 400)}>
         <Text style={styles.networkLabel}>SELECT NETWORK</Text>
         <VelaCard style={styles.networkCard}>
           {DEFAULT_NETWORKS.map((net) => {
@@ -254,7 +255,7 @@ export default function HistoryScreen() {
 
       {/* Address pill */}
       {address ? (
-        <Animated.View style={styles.addressRow} entering={FadeIn.duration(300)}>
+        <Animated.View style={styles.addressRow} entering={fadeIn(0, 300)}>
           <Text style={styles.addressText}>{shortAddress(address)}</Text>
         </Animated.View>
       ) : null}

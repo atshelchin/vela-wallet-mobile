@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -199,7 +200,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
 
       <View style={styles.content}>
         {created ? (
-          <Animated.View style={styles.stateContainer} entering={FadeInDown.duration(400)}>
+          <Animated.View style={styles.stateContainer} entering={fadeInDown(0, 400)}>
             <View style={styles.stateIconWrap}>
               <CheckCircle2 size={40} color={color.success.base} strokeWidth={1.5} />
             </View>
@@ -209,7 +210,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
             </Text>
           </Animated.View>
         ) : uploadFailed ? (
-          <Animated.View style={styles.stateContainer} entering={FadeInDown.duration(400)}>
+          <Animated.View style={styles.stateContainer} entering={fadeInDown(0, 400)}>
             <View style={styles.stateIconWrapError}>
               <AlertTriangle size={32} color={color.accent.base} strokeWidth={2} />
             </View>
@@ -228,7 +229,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
             </Text>
           </Animated.View>
         ) : (
-          <Animated.View entering={FadeIn.duration(400)}>
+          <Animated.View entering={fadeIn(0, 400)}>
             <Text style={styles.label}>Account Name</Text>
             <TextInput
               style={styles.input}
@@ -248,7 +249,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
         )}
 
         {status ? (
-          <Animated.View style={styles.statusRow} entering={FadeIn.duration(200)}>
+          <Animated.View style={styles.statusRow} entering={fadeIn(0, 200)}>
             <Loader size={14} color={color.info.base} />
             <Text style={styles.status}>{status}</Text>
           </Animated.View>

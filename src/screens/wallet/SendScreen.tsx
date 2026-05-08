@@ -20,9 +20,9 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   useSharedValue,
-  FadeInDown,
   Layout,
 } from 'react-native-reanimated';
+import { fadeInDown } from '@/constants/entering';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 
@@ -216,7 +216,7 @@ export default function SendScreen() {
 
   // Step 1: Select Token
   const renderSelectToken = () => (
-    <Animated.View style={styles.stepContainer} entering={FadeInDown.duration(300)}>
+    <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
       <Text style={styles.stepTitle}>Select Token</Text>
       {loading ? (
         <Text style={styles.loadingText}>Loading tokens...</Text>
@@ -253,7 +253,7 @@ export default function SendScreen() {
 
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(300)}>
+        <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>Send {selectedToken.symbol}</Text>
 
           {/* Selected token info */}
@@ -331,7 +331,7 @@ export default function SendScreen() {
 
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(300)}>
+        <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>Confirm</Text>
 
           <VelaCard elevated style={styles.confirmCard}>

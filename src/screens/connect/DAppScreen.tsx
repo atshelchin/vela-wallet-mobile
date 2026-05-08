@@ -17,9 +17,8 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
-  FadeIn,
-  FadeInDown,
 } from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -285,12 +284,12 @@ export default function DAppScreen() {
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeIn.duration(300)}>
+        <Animated.View entering={fadeIn(0, 300)}>
           <Text style={styles.pageTitle}>dApps</Text>
         </Animated.View>
 
         {/* Wallet card */}
-        <Animated.View entering={FadeInDown.delay(50).duration(300)}>
+        <Animated.View entering={fadeInDown(50, 300)}>
           <Pressable onPress={() => setShowAccountPicker(true)}>
             <VelaCard style={styles.walletCard}>
               <View style={styles.walletRow}>
@@ -311,7 +310,7 @@ export default function DAppScreen() {
 
         {/* Connection section */}
         {connectState === 'idle' && (
-          <Animated.View style={styles.section} entering={FadeInDown.delay(100).duration(300)}>
+          <Animated.View style={styles.section} entering={fadeInDown(100, 300)}>
             <View style={styles.connectPrompt}>
               <View style={styles.connectIconWrap}>
                 <ConnectIcon size={24} color={color.info.base} />
@@ -337,7 +336,7 @@ export default function DAppScreen() {
         )}
 
         {isAdvertising && isNative && (
-          <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+          <Animated.View style={styles.section} entering={fadeIn(0, 300)}>
             <VelaCard style={styles.statusCard}>
               <View style={styles.pulseRow}>
                 <PulsingBluetooth />
@@ -349,7 +348,7 @@ export default function DAppScreen() {
         )}
 
         {connectState === 'not-installed' && isWeb && (
-          <Animated.View entering={FadeInDown.duration(300)}>
+          <Animated.View entering={fadeInDown(0, 300)}>
             <VelaCard style={styles.notInstalledCard}>
               <AlertTriangle size={24} color={color.fg.muted} />
               <Text style={styles.notInstalledTitle}>dApp Browser not found</Text>
@@ -364,7 +363,7 @@ export default function DAppScreen() {
 
         {/* Connected state */}
         {connectState === 'connected' && !incomingRequest && (
-          <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+          <Animated.View style={styles.section} entering={fadeIn(0, 300)}>
             <VelaCard style={styles.connectedCard}>
               <View style={styles.connectedRow}>
                 <View style={styles.connectedDot} />
@@ -380,7 +379,7 @@ export default function DAppScreen() {
 
         {/* Signing request */}
         {incomingRequest && (
-          <Animated.View entering={FadeInDown.duration(300)}>
+          <Animated.View entering={fadeInDown(0, 300)}>
             <VelaCard elevated style={styles.requestCard}>
               <View style={styles.requestHeader}>
                 {methodIcon(incomingRequest.method)}

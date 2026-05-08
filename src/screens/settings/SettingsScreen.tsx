@@ -20,7 +20,8 @@ import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, Type as TypeIcon } from 'lucide-react-native';
 import type { NetworkConfig } from '@/models/types';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 
 // ---------------------------------------------------------------------------
 // Settings Row
@@ -66,7 +67,7 @@ function SettingsRow({
 
 function SettingsSection({ title, children, delay = 0 }: { title: string; children: React.ReactNode; delay?: number }) {
   return (
-    <Animated.View style={styles.sectionContainer} entering={FadeInDown.delay(delay).duration(300)}>
+    <Animated.View style={styles.sectionContainer} entering={fadeInDown(delay, 300)}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <VelaCard>{children}</VelaCard>
     </Animated.View>
@@ -327,7 +328,7 @@ export default function SettingsScreen() {
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Title */}
-        <Animated.View entering={FadeIn.duration(300)}>
+        <Animated.View entering={fadeIn(0, 300)}>
           <Text style={styles.screenTitle}>Settings</Text>
         </Animated.View>
 
@@ -401,7 +402,7 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Logout Button */}
-        <Animated.View entering={FadeInDown.delay(250).duration(300)}>
+        <Animated.View entering={fadeInDown(250, 300)}>
           <Pressable style={styles.logoutButton} onPress={handleLogout}>
             <LogOutIcon size={16} color={color.accent.base} />
             <Text style={styles.logoutText}>Logout</Text>

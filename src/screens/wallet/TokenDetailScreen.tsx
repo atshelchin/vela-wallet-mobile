@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -82,7 +83,7 @@ export default function TokenDetailScreen() {
         </View>
 
         {/* Token header */}
-        <Animated.View style={styles.tokenHeader} entering={FadeIn.duration(400)}>
+        <Animated.View style={styles.tokenHeader} entering={fadeIn(0, 400)}>
           <TokenLogo symbol={symbol} logoUrl={logoUrl} size={72} />
           <Text style={styles.tokenName}>{tokenName}</Text>
           <View style={styles.chainBadge}>
@@ -91,7 +92,7 @@ export default function TokenDetailScreen() {
         </Animated.View>
 
         {/* Balance card */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <Animated.View entering={fadeInDown(100, 400)}>
           <VelaCard elevated style={styles.balanceCard}>
             <Text style={styles.balanceLabel}>Balance</Text>
             <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
@@ -109,13 +110,13 @@ export default function TokenDetailScreen() {
         </Animated.View>
 
         {/* Action buttons */}
-        <Animated.View style={styles.buttonRow} entering={FadeInDown.delay(200).duration(400)}>
+        <Animated.View style={styles.buttonRow} entering={fadeInDown(200, 400)}>
           <VelaButton title="Send" onPress={handleSend} style={styles.actionBtn} />
           <VelaButton title="Receive" onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
         </Animated.View>
 
         {/* Token info */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+        <Animated.View entering={fadeInDown(300, 400)}>
           <VelaCard style={styles.infoCard}>
             <InfoRow label="Type" value={isNative ? 'Native' : 'ERC-20'} />
             <View style={styles.separator} />

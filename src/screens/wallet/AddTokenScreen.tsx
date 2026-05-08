@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -186,7 +187,7 @@ export default function AddTokenScreen() {
 
         {/* Token metadata result */}
         {tokenMeta && (
-          <Animated.View entering={FadeInDown.duration(300)}>
+          <Animated.View entering={fadeInDown(0, 300)}>
             <VelaCard elevated style={styles.resultCard}>
               <View style={styles.resultHeader}>
                 <Check size={20} color={color.success.base} strokeWidth={2.5} />
