@@ -310,7 +310,15 @@ type ServiceHealth = {
   detail?: string;
 };
 
-async function checkServiceEndpointHealth(url: string, type: 'data' | 'passkey' | 'bundler'): Promise<ServiceHealth> {
+const SERVICE_IDENTITY: Record<string, string> = {
+  data: 'ethereum-data',
+  passkey: 'webauthn-p256-publickey-index',
+  bundler: 'vela-bundler',
+};
+
+async function checkServiceEndpointHealth(
+  url: string, type: 'data' | 'passkey' | 'bundler',
+): Promise<ServiceHealth> {
   if (!url) return { status: 'unreachable', detail: 'Empty URL' };
 
   // 1. HTTPS check
@@ -318,58 +326,33 @@ async function checkServiceEndpointHealth(url: string, type: 'data' | 'passkey' 
     return { status: 'not_https', detail: 'HTTPS required' };
   }
 
-  // 2. Connectivity + 3. Response validation
+  // 2. Connectivity + 3. Response validation via /api/health
+  const base = url.trim().replace(/[\r\n]/g, '').replace(/\/$/, '');
+  const expected = SERVICE_IDENTITY[type];
   const start = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    if (type === 'bundler') {
-      // Bundler: GET /api/health must return { service: "vela-bundler", status: "ok" }
-      const base = url.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/health`, {
-        method: 'GET', signal: controller.signal, redirect: 'follow',
-      });
-      clearTimeout(timeout);
-      const latencyMs = Date.now() - start;
-      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
-      const json = await res.json();
-      if (json.service !== 'vela-bundler' || json.status !== 'ok') {
-        return { status: 'invalid_response', latencyMs, detail: 'Not a valid vela-bundler service' };
-      }
-      return { status: 'ok', latencyMs };
-
-    } else if (type === 'data') {
-      // Chain Data: GET /api/health must return { service: "ethereum-data", status: "ok" }
-      const base = url.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/health`, {
-        method: 'GET', signal: controller.signal, redirect: 'follow',
-      });
-      clearTimeout(timeout);
-      const latencyMs = Date.now() - start;
-      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
-      const json = await res.json();
-      if (json.service !== 'ethereum-data' || json.status !== 'ok') {
-        return { status: 'invalid_response', latencyMs, detail: 'Not a valid chain data service' };
-      }
-      return { status: 'ok', latencyMs };
-
-    } else {
-      // Passkey Index: GET /api/health must return { service: "webauthn-p256-publickey-index", status: "ok" }
-      const base = url.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/health`, {
-        method: 'GET', signal: controller.signal, redirect: 'follow',
-      });
-      clearTimeout(timeout);
-      const latencyMs = Date.now() - start;
-      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
-      const json = await res.json();
-      if (json.service !== 'webauthn-p256-publickey-index' || json.status !== 'ok') {
-        return { status: 'invalid_response', latencyMs, detail: 'Not a valid passkey index service' };
-      }
-      return { status: 'ok', latencyMs };
-    }
-  } catch {
+    console.log(`[HealthCheck] ${type} → GET ${base}/api/health?_t=${start}`);
+    const res = await fetch(
+      `${base}/api/health?_t=${start}`,
+      { method: 'GET', signal: controller.signal },
+    );
     clearTimeout(timeout);
+    const latencyMs = Date.now() - start;
+    console.log(`[HealthCheck] ${type} → HTTP ${res.status}, ${latencyMs}ms`);
+    if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
+    const text = await res.text();
+    console.log(`[HealthCheck] ${type} → body: ${text}`);
+    const json = JSON.parse(text);
+    if (json.service !== expected || json.status !== 'ok') {
+      console.log(`[HealthCheck] ${type} → INVALID: expected service="${expected}", got service="${json.service}" status="${json.status}"`);
+      return { status: 'invalid_response', latencyMs, detail: `Not a valid ${expected} service` };
+    }
+    return { status: 'ok', latencyMs };
+  } catch (e: any) {
+    clearTimeout(timeout);
+    console.log(`[HealthCheck] ${type} → CATCH: ${e?.message ?? e}`);
     return { status: 'unreachable', detail: 'Connection failed' };
   }
 }
@@ -414,7 +397,8 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
   }, [visible, refreshCount]);
 
   const handleSave = useCallback(async (field: keyof ServiceEndpoints, value: string) => {
-    const updated = { ...endpoints, [field]: value };
+    const clean = value.trim().replace(/[\r\n]/g, '');
+    const updated = { ...endpoints, [field]: clean };
     setEndpoints(updated);
     await saveServiceEndpoints(updated);
     setRefreshCount(c => c + 1);
@@ -423,7 +407,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
   const fields: { key: keyof ServiceEndpoints; label: string; hint: string; healthType: 'data' | 'passkey' | 'bundler' }[] = [
     { key: 'ethereumDataURL', label: 'CHAIN DATA INDEX', hint: 'Provides network info, token data, and chain logos', healthType: 'data' },
     { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores public keys for cross-device recovery', healthType: 'passkey' },
-    { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Processes ERC-4337 transactions', healthType: 'bundler' },
+    { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Vela Bundler compatible endpoint required', healthType: 'bundler' },
   ];
 
   return (
