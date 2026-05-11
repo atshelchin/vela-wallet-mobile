@@ -223,7 +223,7 @@ async function sendUserOp(
     const estVerification = (estimated.verificationGasLimit * 15n) / 10n;
     userOp.verificationGasLimit = deployed
       ? estVerification
-      : bigintMax(estVerification, 450_000n); // floor for first-time deploy (under bundler's 500k MAX)
+      : bigintMax(estVerification, 2_000_000n); // floor for first-time deploy (under bundler's 2M MAX)
     userOp.callGasLimit = bigintMax(
       (estimated.callGasLimit * 15n) / 10n,
       100_000n, // reasonable floor
