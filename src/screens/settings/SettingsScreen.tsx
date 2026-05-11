@@ -7,6 +7,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { useRouter } from 'expo-router';
@@ -14,21 +15,19 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { QRCode } from '@/components/QRCode';
 import { color, text, inter, space, radius, font, shadow, useStyles } from '@/constants/theme';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, loadPriceSource, savePriceSource, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, findAccountByCredentialId } from '@/services/storage';
-import { getAddresses, getAllNetworkFunding, estimateDeployerCost, buildDeployChallenge, requestDeployment, waitForDeployment } from '@/services/deployer-api';
+import { getAddresses, getAllNetworkFunding } from '@/services/deployer-api';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Fuel, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, PriceSource, BundlerDeployerInfo, NetworkFundingStatus, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import { nativeSymbol } from '@/models/network';
-import * as Passkey from '@/modules/passkey';
 import { toHex } from '@/services/hex';
 import Animated, {
   useSharedValue,
@@ -464,8 +463,9 @@ function BundlerDeployerModal({ s, visible, onClose, publicKeyHex }: { s: S; vis
 // Add Network Modal
 // ---------------------------------------------------------------------------
 
-function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void; publicKeyHex: string }) {
-  const { activeAccount } = useWallet();
+const VELA_CHAIN_SETUP_URL = 'https://biubiu.tools/apps/vela-wallet-chain-setup';
+
+function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<ChainSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -475,11 +475,6 @@ function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S;
   const [compatResult, setCompatResult] = useState<CompatibilityResult | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deploying, setDeploying] = useState<string | null>(null);
-  const [fundingInfo, setFundingInfo] = useState<{
-    address: string; chainName: string; symbol: string;
-    balance: string; required: string; shortfall: string; gasPriceGwei: string;
-  } | null>(null);
   const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reset = () => {
@@ -541,63 +536,6 @@ function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S;
     } catch (e: any) {
       setError(e.message ?? 'Check failed');
     } finally { setLoading(false); }
-  };
-
-  // Deploy a missing contract
-  const handleDeploy = async (contractName: string, contractAddress: string) => {
-    if (!chainInfo || !compatResult?.bestRpcUrl || !activeAccount) return;
-    setDeploying(contractAddress);
-    setError('');
-    try {
-      // 1. Check deployer balance
-      const addr = await getAddresses(publicKeyHex);
-      const missingAddresses = compatResult.contracts.filter(c => !c.deployed).map(c => c.address);
-      const cost = await estimateDeployerCost(addr.deployerAddress, chainInfo.chainId, missingAddresses);
-      if (!cost.sufficient) {
-        setFundingInfo({
-          address: addr.deployerAddress,
-          chainName: chainInfo.name,
-          symbol: chainInfo.nativeCurrency.symbol,
-          balance: cost.balanceFormatted,
-          required: cost.requiredFormatted,
-          shortfall: cost.shortfallFormatted,
-          gasPriceGwei: cost.gasPriceGwei,
-        });
-        setDeploying(null);
-        return;
-      }
-
-      // 2. Build challenge and sign with passkey
-      const { challengeHex } = buildDeployChallenge(chainInfo.chainId, contractAddress);
-      const assertion = await Passkey.sign(challengeHex, activeAccount.id);
-
-      // 3. Submit deployment request
-      const result = await requestDeployment({
-        chainId: chainInfo.chainId,
-        rpcUrl: compatResult.bestRpcUrl,
-        contractName,
-        contractAddress,
-        credentialId: activeAccount.id,
-        signatureHex: assertion.signatureHex,
-        challengeHex,
-      });
-
-      // 4. Wait for confirmation
-      const confirmed = await waitForDeployment(result.txHash, compatResult.bestRpcUrl);
-      if (confirmed) {
-        // Re-check all contracts
-        const rpcs = chainInfo.rpcUrls.length > 0 ? chainInfo.rpcUrls : [chainInfo.rpcUrl];
-        const compat = await checkNetworkCompatibility(rpcs, chainInfo.chainId);
-        setCompatResult(compat);
-      } else {
-        setError(`Deployment of ${contractName} failed on-chain.`);
-      }
-    } catch (e: any) {
-      if (e?.code === 'PASSKEY_CANCELLED') { /* user cancelled */ }
-      else setError(e.message ?? 'Deployment failed');
-    } finally {
-      setDeploying(null);
-    }
   };
 
   const handleAdd = async () => {
@@ -724,17 +662,6 @@ function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S;
                       : <XCircle size={14} color={color.accent.base} strokeWidth={2} />}
                     <Text style={[s.addNetCompatText, !c.deployed && s.addNetCompatMissing]}>{c.name}</Text>
                   </View>
-                  {!c.deployed && (
-                    <Pressable
-                      style={s.deployBtn}
-                      onPress={() => handleDeploy(c.name, c.address)}
-                      disabled={deploying !== null}
-                    >
-                      {deploying === c.address
-                        ? <ActivityIndicator size={12} color={color.accent.base} />
-                        : <Text style={s.deployBtnText}>Deploy</Text>}
-                    </Pressable>
-                  )}
                 </View>
               ))}
             </VelaCard>
@@ -763,8 +690,15 @@ function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S;
           {compatResult && !compatResult.compatible && !compatResult.rpcFailed && (
             <View>
               <Text style={s.addNetHint}>
-                Deploy missing contracts to enable this network. Requires Deployer funding.
+                Some required contracts are not yet deployed on this chain.{'\n'}
+                Use the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.
               </Text>
+              <VelaButton
+                title="Open Chain Setup Tool"
+                onPress={() => Linking.openURL(VELA_CHAIN_SETUP_URL)}
+                variant="accent"
+                style={s.checkBtn}
+              />
               <VelaButton
                 title="Re-check"
                 onPress={() => selectedChainId && handleSelect(selectedChainId)}
@@ -774,53 +708,6 @@ function AddNetworkModal({ s, visible, onClose, onAdded, publicKeyHex }: { s: S;
             </View>
           )}
         </ScrollView>
-
-        {/* Deployer Funding Modal */}
-        {fundingInfo && (
-          <View style={s.fundOverlay}>
-            <Pressable style={s.fundBackdrop} onPress={() => setFundingInfo(null)} />
-            <View style={s.fundSheet}>
-              <View style={s.fundHeader}>
-                <Text style={s.fundTitle}>Fund Deployer</Text>
-                <Pressable onPress={() => setFundingInfo(null)} hitSlop={8}><X size={20} color={color.fg.base} strokeWidth={2} /></Pressable>
-              </View>
-              <ScrollView contentContainerStyle={s.fundContent}>
-                <Text style={s.fundDescription}>
-                  Send at least <Text style={s.fundBold}>{fundingInfo.shortfall} {fundingInfo.symbol}</Text> on <Text style={s.fundBold}>{fundingInfo.chainName}</Text> to deploy contracts.
-                </Text>
-                <View style={s.fundInfoGrid}>
-                  <View style={s.fundInfoItem}>
-                    <Text style={s.fundInfoLabel}>Current Balance</Text>
-                    <Text style={s.fundInfoValue}>{fundingInfo.balance} {fundingInfo.symbol}</Text>
-                  </View>
-                  <View style={s.fundInfoItem}>
-                    <Text style={s.fundInfoLabel}>Required (2x buffer)</Text>
-                    <Text style={s.fundInfoValue}>{fundingInfo.required} {fundingInfo.symbol}</Text>
-                  </View>
-                  <View style={s.fundInfoItem}>
-                    <Text style={s.fundInfoLabel}>Gas Price</Text>
-                    <Text style={s.fundInfoValue}>{fundingInfo.gasPriceGwei} Gwei</Text>
-                  </View>
-                </View>
-                <View style={s.fundQrWrap}>
-                  <QRCode value={fundingInfo.address} size={180} />
-                </View>
-                <Pressable
-                  style={s.fundAddressBox}
-                  onPress={async () => {
-                    const Clipboard = await import('expo-clipboard');
-                    await Clipboard.setStringAsync(fundingInfo.address);
-                    Alert.alert('Copied', 'Deployer address copied to clipboard');
-                  }}
-                >
-                  <Text style={s.fundAddress}>{fundingInfo.address}</Text>
-                  <Text style={s.fundCopyHint}>Tap to copy</Text>
-                </Pressable>
-                <VelaButton title="Done" onPress={() => setFundingInfo(null)} style={s.fundDoneBtn} />
-              </ScrollView>
-            </View>
-          </View>
-        )}
       </View>
     </AppModal>
   );
@@ -1040,7 +927,7 @@ export default function SettingsScreen() {
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <BundlerDeployerModal s={styles} visible={showBundlerDeployer} onClose={() => setShowBundlerDeployer(false)} publicKeyHex={publicKeyHex} />
-      <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} publicKeyHex={publicKeyHex} />
+      <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
     </ScreenContainer>
   );
 }
