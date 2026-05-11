@@ -16,16 +16,19 @@ import { fetchChainInfo } from './chain-registry';
 // Required contracts (from safe-address.ts)
 // ---------------------------------------------------------------------------
 
+/** Order matches biubiu.tools Vela Wallet Chain Setup */
 const REQUIRED_CONTRACTS: { name: string; address: string }[] = [
-  { name: 'Safe L2',                 address: '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762' },
-  { name: 'Safe Proxy Factory',      address: '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67' },
-  { name: 'EntryPoint v0.7',         address: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' },
-  { name: 'Safe 4337 Module',        address: '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226' },
-  { name: 'Safe Module Setup',       address: '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47' },
-  { name: 'WebAuthn Signer',         address: '0x94a4F6affBd8975951142c3999aEAB7ecee555c2' },
-  { name: 'Fallback Handler',        address: '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99' },
-  { name: 'MultiSend',               address: '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526' },
-  { name: 'Multicall3',              address: '0xcA11bde05977b3631167028862bE2a173976CA11' },
+  { name: 'Deterministic Deployment Proxy', address: '0x4e59b44847b379578588920cA78FbF26c0B4956C' },
+  { name: 'Safe Singleton Factory',         address: '0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7' },
+  { name: 'Multicall3',                     address: '0xcA11bde05977b3631167028862bE2a173976CA11' },
+  { name: 'EntryPoint v0.7',                address: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' },
+  { name: 'Safe L2',                        address: '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762' },
+  { name: 'Safe Proxy Factory',             address: '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67' },
+  { name: 'Safe 4337 Module',               address: '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226' },
+  { name: 'Safe Module Setup',              address: '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47' },
+  { name: 'WebAuthn Signer',                address: '0x94a4F6affBd8975951142c3999aEAB7ecee555c2' },
+  { name: 'Fallback Handler',               address: '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99' },
+  { name: 'MultiSend',                      address: '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526' },
 ];
 
 // ---------------------------------------------------------------------------

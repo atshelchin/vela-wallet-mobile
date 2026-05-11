@@ -683,10 +683,22 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
             </VelaCard>
           )}
 
-          {/* Per-contract status */}
+          {/* Per-contract status + P256 */}
           {compatResult && !compatResult.rpcFailed && (
             <VelaCard style={s.addNetCompat}>
-              <Text style={s.addNetCompatTitle}>Required Contracts</Text>
+              <Text style={s.addNetCompatTitle}>Compatibility Check</Text>
+
+              {/* P256 precompile — shown first */}
+              <View style={s.contractRow}>
+                <View style={s.contractStatusRow}>
+                  {compatResult.p256Available
+                    ? <CheckCircle2 size={14} color={color.success.base} strokeWidth={2} />
+                    : <XCircle size={14} color={color.accent.base} strokeWidth={2} />}
+                  <Text style={[s.addNetCompatText, !compatResult.p256Available && s.addNetCompatMissing]}>P256 Precompile (RIP-7212)</Text>
+                </View>
+              </View>
+
+              {/* Contracts */}
               {compatResult.contracts.map((c) => (
                 <View key={c.address} style={s.contractRow}>
                   <View style={s.contractStatusRow}>
