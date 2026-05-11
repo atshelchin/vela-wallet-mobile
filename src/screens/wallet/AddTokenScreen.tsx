@@ -12,6 +12,8 @@ import { getAllNetworksSync } from '@/models/network';
 import type { Network } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
+import { rpcCall } from '@/services/rpc-adapter';
+import { MULTICALL3, encAggregate3, decAggregate3 } from '@/services/abi';
 import { Check, ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
@@ -38,20 +40,32 @@ function hexToNumber(hex: string): number {
   return parseInt(stripped, 16);
 }
 
-async function ethCall(rpcUrl: string, to: string, data: string): Promise<string> {
-  const response = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'eth_call',
-      params: [{ to, data }, 'latest'],
-    }),
-  });
-  const json = await response.json();
-  if (json.error) throw new Error(json.error.message);
-  return json.result;
+/**
+ * Fetch ERC-20 name, symbol, decimals via a single Multicall3 aggregate3 call.
+ * Uses rpcCall which routes through the RPC pool with automatic failover.
+ */
+async function fetchErc20Meta(
+  chainId: number,
+  tokenAddress: string,
+): Promise<{ name: string; symbol: string; decimals: number } | null> {
+  const encoded = encAggregate3([
+    { target: tokenAddress, allowFailure: true, callData: '0x' + NAME_SELECTOR.replace('0x', '') },
+    { target: tokenAddress, allowFailure: true, callData: '0x' + SYMBOL_SELECTOR.replace('0x', '') },
+    { target: tokenAddress, allowFailure: true, callData: '0x' + DECIMALS_SELECTOR.replace('0x', '') },
+  ]);
+
+  const response = await rpcCall('eth_call', [{ to: MULTICALL3, data: encoded }, 'latest'], chainId);
+  if (response.error || !response.result) return null;
+
+  const results = decAggregate3(response.result);
+  if (results.length < 3 || !results[0].success || !results[1].success || !results[2].success) return null;
+
+  const name = hexToUtf8(results[0].data);
+  const symbol = hexToUtf8(results[1].data);
+  const decimals = hexToNumber(results[2].data);
+
+  if (!name || !symbol) return null;
+  return { name, symbol, decimals };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,22 +176,14 @@ export default function AddTokenScreen() {
     setTokenMeta(null);
 
     try {
-      const [nameResult, symbolResult, decimalsResult] = await Promise.all([
-        ethCall(selectedNetwork.rpcURL, contractAddress, NAME_SELECTOR),
-        ethCall(selectedNetwork.rpcURL, contractAddress, SYMBOL_SELECTOR),
-        ethCall(selectedNetwork.rpcURL, contractAddress, DECIMALS_SELECTOR),
-      ]);
+      const meta = await fetchErc20Meta(selectedNetwork.chainId, contractAddress);
 
-      const name = hexToUtf8(nameResult);
-      const symbol = hexToUtf8(symbolResult);
-      const decimals = hexToNumber(decimalsResult);
-
-      if (!name || !symbol) {
+      if (!meta) {
         Alert.alert('Not Found', 'Could not find a valid ERC-20 token at this address.');
         return;
       }
 
-      setTokenMeta({ name, symbol, decimals });
+      setTokenMeta(meta);
     } catch (err) {
       Alert.alert('Error', 'Failed to fetch token metadata. Check the address and network.');
     } finally {
