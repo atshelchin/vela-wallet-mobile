@@ -3,7 +3,7 @@
  *
  * 1. Collects all available HTTPS RPCs for the chain
  * 2. Tests latency and picks the fastest one
- * 3. Checks all 8 required contracts via the best RPC
+ * 3. Checks all 9 required contracts via the best RPC
  * 4. Returns per-contract status + best RPC recommendation
  *
  * Only networks where ALL contracts are deployed can be added.
@@ -17,7 +17,7 @@ import { fetchChainInfo } from './chain-registry';
 // ---------------------------------------------------------------------------
 
 const REQUIRED_CONTRACTS: { name: string; address: string }[] = [
-  { name: 'Safe Singleton',          address: '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762' },
+  { name: 'Safe L2',                 address: '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762' },
   { name: 'Safe Proxy Factory',      address: '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67' },
   { name: 'EntryPoint v0.7',         address: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' },
   { name: 'Safe 4337 Module',        address: '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226' },
@@ -25,6 +25,7 @@ const REQUIRED_CONTRACTS: { name: string; address: string }[] = [
   { name: 'WebAuthn Signer',         address: '0x94a4F6affBd8975951142c3999aEAB7ecee555c2' },
   { name: 'Fallback Handler',        address: '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99' },
   { name: 'MultiSend',               address: '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526' },
+  { name: 'Multicall3',              address: '0xcA11bde05977b3631167028862bE2a173976CA11' },
 ];
 
 // ---------------------------------------------------------------------------
