@@ -1,8 +1,10 @@
-# Welcome to your Expo app 👋
+# Vela Wallet
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A self-custodial smart wallet for EVM networks, built with React Native and Expo.
 
-## Get started
+Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.
+
+## Get Started
 
 1. Install dependencies
 
@@ -16,41 +18,20 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+## Self-Deploy Service Endpoints
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Vela Wallet relies on three backend services. Default instances are provided, but you can deploy your own for full self-custody.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 
-## Get a fresh project
+| Service | Description | Repository |
+|---------|-------------|------------|
+| **Chain Data Index** | Network info, token data, chain logos | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data) |
+| **Passkey Index** | Public key storage for cross-device recovery | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
+| **Bundler Service** | ERC-4337 transaction bundler | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler) |
 
-When you're ready, run:
+Each service exposes a `/api/health` endpoint for status verification. The wallet validates all three checks before accepting a custom endpoint:
 
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. **HTTPS** — only secure connections accepted
+2. **Reachable** — server responds within 10 seconds
+3. **Valid response** — `/api/health` returns the correct `service` identifier and `status: "ok"`

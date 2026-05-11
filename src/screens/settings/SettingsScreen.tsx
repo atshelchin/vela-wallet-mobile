@@ -20,14 +20,12 @@ import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
-import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, loadPriceSource, savePriceSource, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, findAccountByCredentialId } from '@/services/storage';
-import { getAddresses, getAllNetworkFunding } from '@/services/deployer-api';
+import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Fuel, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react-native';
-import type { NetworkConfig, ServiceEndpoints, PriceSource, BundlerDeployerInfo, NetworkFundingStatus, CustomNetwork, CompatibilityResult } from '@/models/types';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink } from 'lucide-react-native';
+import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
-import { nativeSymbol } from '@/models/network';
 import { toHex } from '@/services/hex';
 import Animated, {
   useSharedValue,
@@ -306,20 +304,126 @@ function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; o
 // Endpoint Editor Modal
 // ---------------------------------------------------------------------------
 
+type ServiceHealth = {
+  status: 'checking' | 'ok' | 'not_https' | 'unreachable' | 'invalid_response';
+  latencyMs?: number;
+  detail?: string;
+};
+
+async function checkServiceEndpointHealth(url: string, type: 'data' | 'passkey' | 'bundler'): Promise<ServiceHealth> {
+  if (!url) return { status: 'unreachable', detail: 'Empty URL' };
+
+  // 1. HTTPS check
+  if (!url.startsWith('https://')) {
+    return { status: 'not_https', detail: 'HTTPS required' };
+  }
+
+  // 2. Connectivity + 3. Response validation
+  const start = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    if (type === 'bundler') {
+      // Bundler: GET /api/health must return { service: "vela-bundler", status: "ok" }
+      const base = url.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/health`, {
+        method: 'GET', signal: controller.signal, redirect: 'follow',
+      });
+      clearTimeout(timeout);
+      const latencyMs = Date.now() - start;
+      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
+      const json = await res.json();
+      if (json.service !== 'vela-bundler' || json.status !== 'ok') {
+        return { status: 'invalid_response', latencyMs, detail: 'Not a valid vela-bundler service' };
+      }
+      return { status: 'ok', latencyMs };
+
+    } else if (type === 'data') {
+      // Chain Data: GET /api/health must return { service: "ethereum-data", status: "ok" }
+      const base = url.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/health`, {
+        method: 'GET', signal: controller.signal, redirect: 'follow',
+      });
+      clearTimeout(timeout);
+      const latencyMs = Date.now() - start;
+      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
+      const json = await res.json();
+      if (json.service !== 'ethereum-data' || json.status !== 'ok') {
+        return { status: 'invalid_response', latencyMs, detail: 'Not a valid chain data service' };
+      }
+      return { status: 'ok', latencyMs };
+
+    } else {
+      // Passkey Index: GET /api/health must return { service: "webauthn-p256-publickey-index", status: "ok" }
+      const base = url.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/health`, {
+        method: 'GET', signal: controller.signal, redirect: 'follow',
+      });
+      clearTimeout(timeout);
+      const latencyMs = Date.now() - start;
+      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
+      const json = await res.json();
+      if (json.service !== 'webauthn-p256-publickey-index' || json.status !== 'ok') {
+        return { status: 'invalid_response', latencyMs, detail: 'Not a valid passkey index service' };
+      }
+      return { status: 'ok', latencyMs };
+    }
+  } catch {
+    clearTimeout(timeout);
+    return { status: 'unreachable', detail: 'Connection failed' };
+  }
+}
+
+function ServiceHealthBadge({ health }: { health: ServiceHealth }) {
+  if (health.status === 'checking') {
+    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
+  }
+  const cfg: Record<string, { dot: string; label: string }> = {
+    ok: { dot: color.success.base, label: `${health.latencyMs ?? 0}ms` },
+    not_https: { dot: color.accent.base, label: 'HTTPS required' },
+    unreachable: { dot: color.accent.base, label: 'Offline' },
+    invalid_response: { dot: '#E8A317', label: health.detail ?? 'Invalid' },
+  };
+  const { dot, label } = cfg[health.status] ?? cfg.unreachable;
+  return (
+    <View style={healthStyles.badge}>
+      <View style={[healthStyles.dot, { backgroundColor: dot }]} />
+      <Text style={[healthStyles.text, { color: dot }]}>{label}</Text>
+    </View>
+  );
+}
+
 function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
   const [endpoints, setEndpoints] = useState<ServiceEndpoints>({ ...DEFAULT_SERVICE_ENDPOINTS });
+  const [healths, setHealths] = useState<Record<string, ServiceHealth>>({});
+  const [refreshCount, setRefreshCount] = useState(0);
+
   useEffect(() => { if (visible) loadServiceEndpoints().then(setEndpoints); }, [visible]);
+
+  // Health checks on open and manual refresh
+  useEffect(() => {
+    if (!visible) return;
+    const keys = ['ethereumDataURL', 'passkeyIndexURL', 'bundlerServiceURL'] as const;
+    const types = ['data', 'passkey', 'bundler'] as const;
+    setHealths(Object.fromEntries(keys.map(k => [k, { status: 'checking' as const }])));
+    keys.forEach((key, i) => {
+      checkServiceEndpointHealth(endpoints[key], types[i]).then(h => {
+        setHealths(prev => ({ ...prev, [key]: h }));
+      });
+    });
+  }, [visible, refreshCount]);
 
   const handleSave = useCallback(async (field: keyof ServiceEndpoints, value: string) => {
     const updated = { ...endpoints, [field]: value };
     setEndpoints(updated);
     await saveServiceEndpoints(updated);
+    setRefreshCount(c => c + 1);
   }, [endpoints]);
 
-  const fields: { key: keyof ServiceEndpoints; label: string; hint: string }[] = [
-    { key: 'ethereumDataURL', label: 'CHAIN DATA INDEX', hint: 'Provides network info, token data, and chain logos' },
-    { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores public keys for cross-device recovery' },
-    { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Processes ERC-4337 transactions' },
+  const fields: { key: keyof ServiceEndpoints; label: string; hint: string; healthType: 'data' | 'passkey' | 'bundler' }[] = [
+    { key: 'ethereumDataURL', label: 'CHAIN DATA INDEX', hint: 'Provides network info, token data, and chain logos', healthType: 'data' },
+    { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores public keys for cross-device recovery', healthType: 'passkey' },
+    { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Processes ERC-4337 transactions', healthType: 'bundler' },
   ];
 
   return (
@@ -327,24 +431,45 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
           <Text style={s.modalTitle}>Service Endpoints</Text>
-          <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
+          <View style={s.modalHeaderRight}>
+            <Pressable onPress={() => Linking.openURL('https://github.com/atshelchin/vela-wallet-mobile#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
+              <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
+            </Pressable>
+            <Pressable onPress={() => setRefreshCount(c => c + 1)} hitSlop={8} style={s.refreshBtn}>
+              <RefreshCw size={18} color={color.fg.muted} strokeWidth={2} />
+            </Pressable>
+            <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
+          </View>
         </View>
-        <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
-          <Text style={s.endpointDescription}>
-            These services power your wallet. You can replace them with your own if you prefer full self-custody.
+        <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent} keyboardShouldPersistTaps="handled">
+          <Text style={s.epDescription}>
+            These services power your wallet.{'\n'}You can deploy your own instances for full self-custody.
           </Text>
           {fields.map(({ key, label, hint }) => (
-            <View key={key} style={s.endpointField}>
-              <Text style={s.configLabel}>{label}</Text>
-              <Text style={s.endpointHint}>{hint}</Text>
-              <TextInput style={s.configInput} value={endpoints[key]}
+            <VelaCard key={key} style={s.epCard}>
+              <View style={s.epCardHeader}>
+                <View style={s.epCardHeaderLeft}>
+                  <Text style={s.epCardLabel}>{label}</Text>
+                  <Text style={s.epCardHint}>{hint}</Text>
+                </View>
+                <ServiceHealthBadge health={healths[key] ?? { status: 'checking' }} />
+              </View>
+              <View style={s.epCardDivider} />
+              <TextInput
+                style={s.endpointInput}
+                value={endpoints[key]}
                 onChangeText={(v) => setEndpoints({ ...endpoints, [key]: v })}
                 onBlur={() => handleSave(key, endpoints[key])}
-                autoCapitalize="none" autoCorrect={false}
-                placeholder={DEFAULT_SERVICE_ENDPOINTS[key]} placeholderTextColor={color.fg.subtle} />
-            </View>
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+                scrollEnabled={false}
+                placeholder={DEFAULT_SERVICE_ENDPOINTS[key]}
+                placeholderTextColor={color.fg.subtle}
+              />
+            </VelaCard>
           ))}
-          <Pressable style={s.resetEndpointsBtn} onPress={() => { setEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); saveServiceEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); }}>
+          <Pressable style={s.resetEndpointsBtn} onPress={() => { setEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); saveServiceEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); setRefreshCount(c => c + 1); }}>
             <Text style={s.resetEndpointsText}>Reset to Defaults</Text>
           </Pressable>
         </ScrollView>
@@ -353,111 +478,6 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
   );
 }
 
-// ---------------------------------------------------------------------------
-// Bundler/Deployer Modal (per wallet, per network)
-// ---------------------------------------------------------------------------
-
-function StatusDot({ status }: { status: string }) {
-  const dotColor = status === 'funded' ? color.success.base : status === 'low_balance' ? '#E8A317' : color.fg.subtle;
-  return <View style={[styleStatic.dot, { backgroundColor: dotColor }]} />;
-}
-
-const styleStatic = { dot: { width: 8, height: 8, borderRadius: 4 } };
-
-function BundlerDeployerModal({ s, visible, onClose, publicKeyHex }: { s: S; visible: boolean; onClose: () => void; publicKeyHex: string }) {
-  const [info, setInfo] = useState<BundlerDeployerInfo | null>(null);
-  const [funding, setFunding] = useState<NetworkFundingStatus[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [allNets, setAllNets] = useState<Network[]>(DEFAULT_NETWORKS);
-
-  const loadData = useCallback(async () => {
-    if (!publicKeyHex) return;
-    setLoading(true);
-    try {
-      const nets = await getAllNetworks();
-      setAllNets(nets);
-      const addr = await getAddresses(publicKeyHex);
-      setInfo(addr);
-      const chainIds = nets.map(n => n.chainId);
-      const statuses = await getAllNetworkFunding(addr.bundlerAddress, addr.deployerAddress, chainIds);
-      setFunding(statuses);
-    } catch {} finally { setLoading(false); }
-  }, [publicKeyHex]);
-
-  useEffect(() => { if (visible) loadData(); }, [visible, loadData]);
-
-  return (
-    <AppModal visible={visible} onClose={onClose}>
-      <View style={s.modalContainer}>
-        <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>Transaction Services</Text>
-          <View style={s.modalHeaderRight}>
-            <Pressable onPress={loadData} hitSlop={8} style={s.refreshBtn}>
-              <RefreshCw size={18} color={color.fg.muted} strokeWidth={2} />
-            </Pressable>
-            <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
-          </View>
-        </View>
-        <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent}>
-          {/* Addresses */}
-          {info && (
-            <View style={s.bdAddresses}>
-              <View style={s.bdAddrBox}>
-                <Text style={s.bdAddrLabel}>BUNDLER ADDRESS</Text>
-                <Text style={s.bdAddrValue} selectable numberOfLines={1}>{info.bundlerAddress}</Text>
-              </View>
-              <View style={s.bdAddrBox}>
-                <Text style={s.bdAddrLabel}>DEPLOYER ADDRESS</Text>
-                <Text style={s.bdAddrValue} selectable numberOfLines={1}>{info.deployerAddress}</Text>
-              </View>
-            </View>
-          )}
-
-          <Text style={s.endpointDescription}>
-            Fund the Bundler address on each network to enable transactions. Fund the Deployer address to activate new networks. A 15% service fee applies.
-          </Text>
-
-          {loading ? (
-            <View style={s.loadingRow}><ActivityIndicator size="small" color={color.accent.base} /><Text style={s.loadingText}>Checking balances...</Text></View>
-          ) : (
-            allNets.map(net => {
-              const f = funding.find(f => f.chainId === net.chainId);
-              const sym = nativeSymbol(net.chainId);
-              return (
-                <VelaCard key={net.id} style={s.bdNetworkCard}>
-                  <View style={s.bdNetworkRow}>
-                    <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />
-                    <Text style={s.bdNetworkName}>{net.displayName}</Text>
-                  </View>
-                  <View style={s.bdBalanceGrid}>
-                    <View style={s.bdBalanceCol}>
-                      <Text style={s.bdBalanceLabel}>Bundler</Text>
-                      <View style={s.bdBalanceRow}>
-                        <StatusDot status={f?.bundlerStatus ?? 'not_funded'} />
-                        <Text style={s.bdBalanceValue}>{f?.bundlerBalance ?? '0'} {sym}</Text>
-                      </View>
-                    </View>
-                    <View style={s.bdBalanceCol}>
-                      <Text style={s.bdBalanceLabel}>Deployer</Text>
-                      <View style={s.bdBalanceRow}>
-                        <StatusDot status={f?.deployerStatus ?? 'not_funded'} />
-                        <Text style={s.bdBalanceValue}>{f?.deployerBalance ?? '0'} {sym}</Text>
-                      </View>
-                    </View>
-                  </View>
-                </VelaCard>
-              );
-            })
-          )}
-
-          <Text style={s.serviceDisclaimer}>
-            Funds are consumed as network fees and are not refundable. Self-hosting eliminates the service fee.
-          </Text>
-        </ScrollView>
-      </View>
-    </AppModal>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Add Network Modal
@@ -847,21 +867,9 @@ export default function SettingsScreen() {
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
-  const [showBundlerDeployer, setShowBundlerDeployer] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [priceSource, setPriceSource] = useState<PriceSource>('api');
-  const [publicKeyHex, setPublicKeyHex] = useState('');
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
-
-  useEffect(() => { loadPriceSource().then(setPriceSource); }, []);
-  useEffect(() => {
-    if (activeAccount?.id) {
-      findAccountByCredentialId(activeAccount.id).then(stored => {
-        if (stored?.publicKeyHex) setPublicKeyHex(stored.publicKeyHex);
-      });
-    }
-  }, [activeAccount?.id]);
 
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
@@ -900,20 +908,6 @@ export default function SettingsScreen() {
               onChangeIndex={setScaleIndex}
             />
             <View style={styles.settingsRowDividerFull} />
-            <View style={styles.priceSourceRow}>
-              <Text style={styles.priceSourceLabel}>Price Source</Text>
-              <View style={styles.priceSourceToggle}>
-                <Pressable style={[styles.priceSourceOption, priceSource === 'api' && styles.priceSourceOptionActive]}
-                  onPress={() => { setPriceSource('api'); savePriceSource('api'); }}>
-                  <Text style={[styles.priceSourceText, priceSource === 'api' && styles.priceSourceTextActive]}>API</Text>
-                </Pressable>
-                <Pressable style={[styles.priceSourceOption, priceSource === 'dex' && styles.priceSourceOptionActive]}
-                  onPress={() => { setPriceSource('dex'); savePriceSource('dex'); }}>
-                  <Text style={[styles.priceSourceText, priceSource === 'dex' && styles.priceSourceTextActive]}>DEX</Text>
-                </Pressable>
-              </View>
-            </View>
-            <View style={styles.settingsRowDividerFull} />
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
               title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
           </VelaCard>
@@ -935,10 +929,7 @@ export default function SettingsScreen() {
                 showDivider={true} onPress={() => setShowAddNetwork(true)} />
               <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Server }}
                 title="Service Endpoints" subtitle="Chain data, identity index, Bundler"
-                showDivider={true} onPress={() => setShowEndpointEditor(true)} />
-              <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Fuel }}
-                title="Transaction Services" subtitle="Bundler & Deployer per network"
-                showDivider={false} onPress={() => setShowBundlerDeployer(true)} />
+                showDivider={false} onPress={() => setShowEndpointEditor(true)} />
             </VelaCard>
           )}
         </Animated.View>
@@ -955,7 +946,6 @@ export default function SettingsScreen() {
       <AccountSwitcherModal s={styles} visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
-      <BundlerDeployerModal s={styles} visible={showBundlerDeployer} onClose={() => setShowBundlerDeployer(false)} publicKeyHex={publicKeyHex} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
     </ScreenContainer>
   );
@@ -1032,38 +1022,21 @@ const styleFactory = () => ({
   configInput: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base },
 
   // Endpoint Editor
+  epScrollContent: { padding: space.xl, paddingBottom: space['5xl'] },
+  epDescription: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl, paddingHorizontal: space.sm },
   endpointDescription: { fontSize: text.base, ...inter.regular, color: color.fg.muted, lineHeight: 22, marginBottom: space['2xl'] },
-  endpointField: { gap: space.sm, marginBottom: space['2xl'] },
-  endpointHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle, marginBottom: space.xs },
-  resetEndpointsBtn: { alignItems: 'center' as const, paddingVertical: space.xl, marginTop: space.lg },
+  epCard: { marginBottom: space.lg, padding: space.xl },
+  epCardHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: space.md },
+  epCardHeaderLeft: { flex: 1, gap: 2 },
+  epCardLabel: { fontSize: text.sm, ...inter.bold, color: color.fg.base, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  epCardHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
+  epCardDivider: { height: 1, backgroundColor: color.border.base, marginBottom: space.lg },
+  endpointInput: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base, minHeight: 56, textAlignVertical: 'top' as const },
+  resetEndpointsBtn: { alignItems: 'center' as const, paddingVertical: space.xl, marginTop: space.sm },
   resetEndpointsText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
-
-  // Price Source
-  priceSourceRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: space.xl, paddingVertical: space.lg },
-  priceSourceLabel: { fontSize: text.base, ...inter.medium, color: color.fg.base },
-  priceSourceToggle: { flexDirection: 'row' as const, backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: 3 },
-  priceSourceOption: { paddingHorizontal: space.xl, paddingVertical: space.md, borderRadius: radius.md },
-  priceSourceOptionActive: { backgroundColor: color.bg.base, ...shadow.sm },
-  priceSourceText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
-  priceSourceTextActive: { color: color.accent.base, ...inter.semibold },
-
-  // Bundler/Deployer
   refreshBtn: { padding: space.sm },
-  bdAddresses: { gap: space.lg, marginBottom: space['2xl'] },
-  bdAddrBox: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, gap: space.xs },
-  bdAddrLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1, textTransform: 'uppercase' as const },
-  bdAddrValue: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base },
-  bdNetworkCard: { padding: space.xl, marginBottom: space.md },
-  bdNetworkRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, marginBottom: space.lg },
-  bdNetworkName: { fontSize: text.base, ...inter.semibold, color: color.fg.base, flex: 1 },
-  bdBalanceGrid: { flexDirection: 'row' as const, gap: space.xl },
-  bdBalanceCol: { flex: 1, gap: space.xs },
-  bdBalanceLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-  bdBalanceRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  bdBalanceValue: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base },
   loadingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: space.md, paddingVertical: space['3xl'] },
   loadingText: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
-  serviceDisclaimer: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, lineHeight: 20, marginTop: space.xl, textAlign: 'center' as const },
 
   // Add Network — search
   searchField: { marginBottom: space.md },
@@ -1094,22 +1067,4 @@ const styleFactory = () => ({
   addNetCompatError: { fontSize: text.sm, ...inter.regular, color: color.accent.base, marginTop: space.sm },
   addNetHint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
 
-  // Deployer Funding Modal
-  fundOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' as const },
-  fundBackdrop: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
-  fundSheet: { backgroundColor: color.bg.base, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' as unknown as number },
-  fundHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: space['2xl'], paddingVertical: space.xl, borderBottomWidth: 1, borderBottomColor: color.border.base },
-  fundTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  fundContent: { alignItems: 'center' as const, padding: space['2xl'], paddingBottom: space['5xl'] },
-  fundDescription: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 22, marginBottom: space['2xl'] },
-  fundBold: { ...inter.semibold, color: color.fg.base },
-  fundQrWrap: { padding: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, marginBottom: space['2xl'], ...shadow.sm },
-  fundAddressBox: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.xl, alignSelf: 'stretch' as const, alignItems: 'center' as const, gap: space.xs, marginBottom: space['2xl'] },
-  fundAddress: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.base, textAlign: 'center' as const },
-  fundCopyHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
-  fundInfoGrid: { alignSelf: 'stretch' as const, backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.xl, gap: space.md, marginBottom: space['2xl'] },
-  fundInfoItem: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
-  fundInfoLabel: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
-  fundInfoValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
-  fundDoneBtn: { alignSelf: 'stretch' as const },
 });

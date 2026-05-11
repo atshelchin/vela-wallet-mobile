@@ -224,7 +224,7 @@ export type PriceSource = 'api' | 'dex';
 export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://webauthnp256-publickey-index.biubiu.tools',
-  bundlerServiceURL: 'https://api.pimlico.io',
+  bundlerServiceURL: 'https://bundler.getvela.app',
 };
 
 // MARK: - BLE Message Types
