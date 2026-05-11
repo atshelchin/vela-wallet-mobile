@@ -203,6 +203,8 @@ export interface CompatibilityResult {
   bestRpcUrl?: string;
   /** Best RPC latency in ms */
   bestRpcLatency?: number;
+  /** RIP-7212 P256 precompile available (required for passkey signatures) */
+  p256Available?: boolean;
   /** True when all RPC attempts failed — result is inconclusive */
   rpcFailed?: boolean;
   error?: string;

@@ -79,21 +79,32 @@ export async function checkNetworkCompatibility(
 
   console.log(`[NetworkChecker] Best RPC: ${best.url} (${best.latencyMs}ms)`);
 
-  // 3. Check all required contracts via the best RPC
-  const contracts = await checkAllContracts(best.url);
+  // 3. Check all required contracts + P256 precompile via the best RPC
+  const [contracts, p256Available] = await Promise.all([
+    checkAllContracts(best.url),
+    checkP256Precompile(best.url),
+  ]);
 
   const allDeployed = contracts.every(c => c.deployed);
   const missing = contracts.filter(c => !c.deployed);
+  const compatible = allDeployed && p256Available;
+
+  const issues: string[] = [];
+  if (missing.length > 0) {
+    issues.push(`${missing.length} contract${missing.length > 1 ? 's' : ''} not deployed: ${missing.map(c => c.name).join(', ')}`);
+  }
+  if (!p256Available) {
+    issues.push('P256 precompile (RIP-7212) not available — passkey signatures will not work');
+  }
 
   return {
     chainId,
-    compatible: allDeployed,
+    compatible,
     contracts,
+    p256Available,
     bestRpcUrl: best.url,
     bestRpcLatency: best.latencyMs,
-    error: allDeployed
-      ? undefined
-      : `${missing.length} contract${missing.length > 1 ? 's' : ''} not deployed: ${missing.map(c => c.name).join(', ')}`,
+    error: issues.length > 0 ? issues.join('. ') : undefined,
   };
 }
 
@@ -158,6 +169,50 @@ async function checkAllContracts(rpcUrl: string): Promise<ContractStatus[]> {
     return { ...REQUIRED_CONTRACTS[i], deployed: false };
   });
 }
+
+// ---------------------------------------------------------------------------
+// RIP-7212 P256 precompile check
+// ---------------------------------------------------------------------------
+
+const P256_PRECOMPILE = '0x0000000000000000000000000000000000000100';
+
+/** sha256("test") signed with a known P-256 key — 160 bytes input */
+const VALID_P256_CALL =
+  '0x' +
+  '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08' +
+  '7bf0e18d07660f15994adce5c3836d7bd6167cdb5726f631098f433ebe0be9c0' +
+  '3936edbe5c791477e714e58244afb690b9b88b833ff4acdf0fbd1b28bf0b1182' +
+  '3be8cbcb3f590087711ae5ed74b9cd06a88058d0bbe700b5f0ec5a1bfac15592' +
+  'f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314';
+
+async function checkP256Precompile(rpcUrl: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'eth_call',
+        params: [{ to: P256_PRECOMPILE, data: VALID_P256_CALL }, 'latest'],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return false;
+    const json = await res.json();
+    const result = json.result as string | undefined;
+    return !!result && result !== '0x' && result.length >= 66 && BigInt(result) === 1n;
+  } catch {
+    clearTimeout(timeout);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Contract deployment check (eth_getCode)
+// ---------------------------------------------------------------------------
 
 async function checkCode(rpcUrl: string, address: string): Promise<boolean> {
   const controller = new AbortController();
