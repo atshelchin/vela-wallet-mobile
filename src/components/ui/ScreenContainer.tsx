@@ -3,7 +3,6 @@ import { KeyboardAvoidingView, Platform, View, type ViewStyle } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, createStyles } from '@/constants/theme';
 import { useTextScale } from '@/constants/text-scale';
-import { useColorSchemePreference } from '@/constants/color-scheme';
 
 interface Props {
   children: React.ReactNode;
@@ -14,14 +13,12 @@ interface Props {
 /**
  * Standard screen wrapper with safe area, consistent padding, and keyboard avoidance.
  *
- * Subscribes to color scheme and text scale contexts so that createStyles
- * Proxy returns fresh values on re-render. The actual re-render trigger
- * comes from Appearance.setColorScheme() which fires useColorScheme()
- * throughout the entire app — including React Navigation internals.
+ * Dark mode is handled by Stack key={resolved} in _layout.tsx which remounts
+ * the entire navigation tree — no need to subscribe to color scheme here.
  */
 export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
+  // Re-render on text scale change so createStyles Proxy returns fresh values
   useTextScale();
-  useColorSchemePreference();
 
   return (
     <View style={[styles.container, style]}>

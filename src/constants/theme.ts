@@ -119,10 +119,9 @@ export function createStyles<T extends RNStyleSheet.NamedStyles<T>>(
 export function useStyles<T extends RNStyleSheet.NamedStyles<T>>(
   factory: () => T | RNStyleSheet.NamedStyles<T>,
 ): T {
-  const { version: textVer } = require('@/constants/text-scale').useTextScale();
-  const { version: colorVer } = require('@/constants/color-scheme').useColorSchemePreference();
+  const { version } = require('@/constants/text-scale').useTextScale();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return React.useMemo(() => RNStyleSheet.create(factory() as T) as T, [textVer, colorVer]);
+  return React.useMemo(() => RNStyleSheet.create(factory() as T) as T, [version]);
 }
 
 export const leading = {

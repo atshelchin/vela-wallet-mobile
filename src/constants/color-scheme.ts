@@ -1,12 +1,12 @@
 /**
  * Color scheme preference system — auto / light / dark.
  *
- * Uses Appearance.setColorScheme() to set the app-wide color scheme natively.
- * This triggers useColorScheme() hooks everywhere — including React Navigation's
- * internal components — causing ALL screens to re-render with correct colors.
- *
- * Pattern: Appearance.setColorScheme → useColorScheme fires → rebuildColors
- *          synchronously → components re-render with new color tokens.
+ * How it works:
+ *   1. User sets preference → Appearance.setColorScheme() for native UI
+ *      (status bar, keyboard, system dialogs)
+ *   2. rebuildColors() mutates color tokens synchronously
+ *   3. Stack key={resolved} in _layout.tsx remounts the navigation tree,
+ *      so all screens render fresh with correct colors
  */
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -48,12 +48,8 @@ export async function loadColorScheme(): Promise<void> {
   }
 }
 
-/**
- * Apply the preference to the native Appearance API.
- * Call at startup after loading preference, and when user changes preference.
- */
+/** Apply the preference to the native Appearance API (status bar, keyboard, etc.). */
 export function applyColorScheme(pref: ColorSchemePreference): void {
-  // 'unspecified' tells React Native to follow system preference
   Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
 }
 
@@ -62,14 +58,12 @@ export function applyColorScheme(pref: ColorSchemePreference): void {
 // ---------------------------------------------------------------------------
 
 interface ColorSchemeContextValue {
-  version: number;
   preference: ColorSchemePreference;
   resolved: 'light' | 'dark';
   setPreference: (pref: ColorSchemePreference) => void;
 }
 
 const ColorSchemeContext = createContext<ColorSchemeContextValue>({
-  version: 0,
   preference: 'auto',
   resolved: 'light',
   setPreference: () => {},
@@ -79,52 +73,35 @@ export function useColorSchemePreference() {
   return useContext(ColorSchemeContext);
 }
 
-/**
- * Provider that manages color scheme state.
- *
- * Relies on Appearance.setColorScheme() to propagate changes natively.
- * useColorScheme() fires in ALL components (including React Navigation
- * internals), causing the entire screen tree to re-render.
- *
- * rebuildColors() is called synchronously so color tokens are correct
- * by the time components access them during re-render.
- */
 export function ColorSchemeProvider({ children }: { children: React.ReactNode }) {
-  // This hook fires whenever Appearance.setColorScheme() is called
-  // or when the system scheme changes (for 'auto' mode)
   const systemScheme = useSystemColorScheme();
   const [preference, setPreferenceState] = useState<ColorSchemePreference>(_preference);
-  const [version, setVersion] = useState(0);
 
   const resolved = resolveColorScheme(preference, systemScheme);
 
-  // Synchronously rebuild colors during render.
-  // By the time children render, color tokens are already correct.
+  // Synchronously rebuild colors during render so tokens are correct
+  // before the Stack (with key={resolved}) mounts fresh screens.
   const { rebuildColors } = require('@/constants/theme');
   rebuildColors(resolved === 'dark');
 
   const setPreference = useCallback((pref: ColorSchemePreference) => {
     _preference = pref;
-    // 1. Set native color scheme — triggers useColorScheme() everywhere
+    // Native UI (status bar, keyboard, system dialogs)
     Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
-    // 2. Rebuild tokens synchronously (before React processes state updates)
+    // Rebuild tokens synchronously
     const effectiveScheme = Appearance.getColorScheme();
-    const newResolved = resolveColorScheme(pref, effectiveScheme);
     const { rebuildColors: rebuild } = require('@/constants/theme');
-    rebuild(newResolved === 'dark');
-    // 3. Update state (React batches with the Appearance-triggered re-renders)
+    rebuild(resolveColorScheme(pref, effectiveScheme) === 'dark');
+    // Trigger re-render → resolved changes → Stack key changes → full remount
     setPreferenceState(pref);
-    setVersion(v => v + 1);
-    // 4. Persist in background
     AsyncStorage.setItem(STORAGE_KEY, pref).catch(() => {});
   }, []);
 
   const value = useMemo(() => ({
-    version,
     preference,
     resolved,
     setPreference,
-  }), [version, preference, resolved, setPreference]);
+  }), [preference, resolved, setPreference]);
 
   return React.createElement(ColorSchemeContext.Provider, { value }, children);
 }
