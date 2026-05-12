@@ -9,7 +9,7 @@
  * On web, renders a custom modal that matches the app's design.
  */
 
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import { color, createStyles, inter, radius, shadow, space, text } from '@/constants/theme';
 
@@ -60,45 +60,70 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
     btn?.onPress?.();
   }, []);
 
+  // Create a persistent DOM container above all modals (z-index > AppModal's 99999)
+  const portalRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999999;pointer-events:none;';
+    document.body.appendChild(el);
+    portalRef.current = el;
+    return () => { el.remove(); };
+  }, []);
+
+  // Toggle pointer-events when alert is visible
+  useEffect(() => {
+    if (portalRef.current) {
+      portalRef.current.style.pointerEvents = alert.visible ? 'auto' : 'none';
+    }
+  }, [alert.visible]);
+
+  const alertContent = Platform.OS === 'web' && alert.visible ? (
+    <View style={styles.overlay}>
+      <Pressable style={styles.backdrop} onPress={() => dismiss()} />
+      <View style={styles.card}>
+        <Text style={styles.title}>{alert.title}</Text>
+        {alert.message ? <Text style={styles.message}>{alert.message}</Text> : null}
+        <View style={styles.buttonRow}>
+          {alert.buttons.map((btn, i) => {
+            const isDestructive = btn.style === 'destructive';
+            const isCancel = btn.style === 'cancel';
+            const isPrimary = !isCancel && !isDestructive && alert.buttons.length > 1 && i === alert.buttons.length - 1;
+            return (
+              <Pressable
+                key={i}
+                style={[
+                  styles.button,
+                  isPrimary && styles.buttonPrimary,
+                  isDestructive && styles.buttonDestructive,
+                ]}
+                onPress={() => dismiss(btn)}
+              >
+                <Text style={[
+                  styles.buttonText,
+                  isCancel && styles.buttonTextCancel,
+                  isPrimary && styles.buttonTextPrimary,
+                  isDestructive && styles.buttonTextDestructive,
+                ]}>
+                  {btn.text ?? 'OK'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  ) : null;
+
+  // Render alert via DOM portal so it's above all AppModals
+  const portalRendered = Platform.OS === 'web' && portalRef.current && alertContent
+    ? require('react-dom').createPortal(alertContent, portalRef.current)
+    : null;
+
   return (
     <AlertContext.Provider value={show}>
       {children}
-      {Platform.OS === 'web' && alert.visible && (
-        <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => dismiss()} />
-          <View style={styles.card}>
-            <Text style={styles.title}>{alert.title}</Text>
-            {alert.message ? <Text style={styles.message}>{alert.message}</Text> : null}
-            <View style={styles.buttonRow}>
-              {alert.buttons.map((btn, i) => {
-                const isDestructive = btn.style === 'destructive';
-                const isCancel = btn.style === 'cancel';
-                const isPrimary = !isCancel && alert.buttons.length > 1 && i === alert.buttons.length - 1;
-                return (
-                  <Pressable
-                    key={i}
-                    style={[
-                      styles.button,
-                      isPrimary && styles.buttonPrimary,
-                      isDestructive && styles.buttonDestructive,
-                    ]}
-                    onPress={() => dismiss(btn)}
-                  >
-                    <Text style={[
-                      styles.buttonText,
-                      isCancel && styles.buttonTextCancel,
-                      isPrimary && styles.buttonTextPrimary,
-                      isDestructive && styles.buttonTextDestructive,
-                    ]}>
-                      {btn.text ?? 'OK'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      )}
+      {portalRendered}
     </AlertContext.Provider>
   );
 }
