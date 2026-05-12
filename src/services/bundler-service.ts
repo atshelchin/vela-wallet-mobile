@@ -43,7 +43,9 @@ export interface FundingNeeded {
   chainId: number;
   /** Native token symbol. */
   nativeSym: string;
-  /** Recommended minimum deposit (wei). */
+  /** Minimum balance required to proceed (wei). */
+  thresholdWei: bigint;
+  /** Recommended deposit amount (wei) — threshold minus current + 20% buffer. */
   recommendedWei: bigint;
   /** Current spendable balance (wei). */
   currentBalance: bigint;
@@ -115,6 +117,7 @@ export async function checkBundlerFunding(
     safeAddress,
     chainId,
     nativeSym: info.nativeSym,
+    thresholdWei: threshold,
     recommendedWei,
     currentBalance: info.spendableBalance,
     recommendedFormatted: formatWei(recommendedWei),

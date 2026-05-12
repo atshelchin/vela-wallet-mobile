@@ -25,7 +25,6 @@ interface Props {
 }
 
 const POLL_INTERVAL = 10_000; // 10s
-const MIN_BALANCE_WEI = BigInt('500000000000000'); // 0.0005
 
 export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
   const [copied, setCopied] = useState(false);
@@ -34,12 +33,15 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   const [funded, setFunded] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Use the actual threshold from the funding check — not a hardcoded constant.
+  const requiredWei = funding.thresholdWei;
+
   const checkBalance = useCallback(async () => {
     setChecking(true);
     clearBundlerCache(funding.chainId, funding.safeAddress);
     try {
       const info = await fetchBundlerAccountInfo(funding.chainId, funding.safeAddress);
-      if (info && info.spendableBalance >= MIN_BALANCE_WEI) {
+      if (info && info.spendableBalance >= requiredWei) {
         setFunded(true);
         setCurrentBalance(formatWei(info.spendableBalance));
         hapticSuccess();
@@ -48,7 +50,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       }
     } catch { /* ignore */ }
     setChecking(false);
-  }, [funding.chainId, funding.safeAddress]);
+  }, [funding.chainId, funding.safeAddress, requiredWei]);
 
   // Auto-poll for balance changes
   useEffect(() => {
@@ -71,10 +73,11 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Gas Account Setup</Text>
+          <Text style={styles.title}>Fund Gas Relayer</Text>
           <Text style={styles.subtitle}>
-            Send a small amount of {funding.nativeSym} to activate
-            transaction relaying on this network.
+            Your transactions are relayed by a dedicated gas account.
+            Deposit {funding.nativeSym} to cover the on-chain gas fee
+            for this transaction.
           </Text>
         </View>
 
@@ -104,7 +107,14 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {/* Amount info */}
         <VelaCard style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Recommended</Text>
+            <Text style={styles.infoLabel}>Required</Text>
+            <Text style={styles.infoValue}>
+              {formatWei(requiredWei)} {funding.nativeSym}
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Deposit</Text>
             <Text style={styles.infoValue}>
               {funding.recommendedFormatted} {funding.nativeSym}
             </Text>
@@ -120,8 +130,10 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* Note */}
         <Text style={styles.note}>
-          This gas is used over time to relay your transactions. It is not
-          deducted from your Safe wallet. Send from any wallet or exchange.
+          This {funding.nativeSym} pays the on-chain gas when your transaction
+          is submitted. Unused balance stays in the gas account and is used
+          for future transactions. It is separate from your Safe wallet
+          balance. You can deposit from any wallet or exchange.
         </Text>
 
         {/* Actions */}

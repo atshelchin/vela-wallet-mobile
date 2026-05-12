@@ -13,7 +13,7 @@ import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, type TransactionFeeEstimate } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, estimateRecommendedFunding, formatWei, type FundingNeeded } from '@/services/bundler-service';
+import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -374,12 +374,17 @@ export default function SendScreen() {
           clearBundlerCache(chainId, activeAccount!.address);
           const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
           if (info) {
-            const recommendedWei = await estimateRecommendedFunding(chainId);
+            const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId);
+            const thresholdWei = fee.totalWei * 2n;
+            const deficit = thresholdWei - info.spendableBalance;
+            const base = deficit > 0n ? deficit : thresholdWei;
+            const recommendedWei = (base * 12n) / 10n;
             setFundingNeeded({
               depositAddress: info.depositAddress,
               safeAddress: activeAccount!.address,
               chainId,
               nativeSym: info.nativeSym,
+              thresholdWei,
               recommendedWei,
               currentBalance: info.spendableBalance,
               recommendedFormatted: formatWei(recommendedWei),
