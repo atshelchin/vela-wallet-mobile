@@ -9,6 +9,7 @@
  * highest-scoring endpoint first, with automatic failover on connectivity errors.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import { fetchChainInfo } from './chain-registry';
 import { getNetworkConfig } from './storage';
@@ -44,6 +45,66 @@ const rpcPools = new Map<number, EndpointStats[]>();
 const bundlerPools = new Map<number, EndpointStats[]>();
 const poolInitAt = new Map<number, number>();
 const POOL_REFRESH_MS = 10 * 60 * 1000; // 10 min
+
+/**
+ * Ban system — two tiers:
+ *   Temporary: rate-limited, 401/403, "exceeded" etc. Cooldown = 1 hour, then retry.
+ *   Permanent: never had a single success AND failed >= 6 times. Persisted forever.
+ */
+const BANNED_STORAGE_KEY = 'vela.rpc.banned';
+const TEMP_BAN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const PERMA_BAN_MIN_FAILURES = 6;
+
+interface BanEntry { url: string; bannedAt: number; permanent: boolean }
+const banMap = new Map<string, BanEntry>();
+let banLoaded = false;
+
+async function loadBans(): Promise<void> {
+  if (banLoaded) return;
+  try {
+    const raw = await AsyncStorage.getItem(BANNED_STORAGE_KEY);
+    if (raw) {
+      for (const e of JSON.parse(raw) as BanEntry[]) banMap.set(e.url, e);
+    }
+  } catch { /* ignore */ }
+  banLoaded = true;
+}
+
+async function saveBans(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(BANNED_STORAGE_KEY, JSON.stringify([...banMap.values()]));
+  } catch { /* ignore */ }
+}
+
+/** Check whether a URL is currently banned (skipping expired temp bans). */
+function isBanned(url: string): boolean {
+  const entry = banMap.get(url);
+  if (!entry) return false;
+  if (entry.permanent) return true;
+  if (Date.now() - entry.bannedAt < TEMP_BAN_TTL_MS) return true;
+  // Temp ban expired — remove it
+  banMap.delete(url);
+  return false;
+}
+
+/** Temporarily ban a URL (1-hour cooldown). */
+function tempBan(url: string): void {
+  banMap.set(url, { url, bannedAt: Date.now(), permanent: false });
+  saveBans();
+}
+
+/**
+ * Check and apply permanent ban if warranted:
+ * the endpoint has NEVER succeeded and has failed >= 6 times.
+ */
+function maybePermaBan(stats: EndpointStats): void {
+  const successes = stats.totalCalls - stats.totalFailures;
+  if (successes === 0 && stats.totalFailures >= PERMA_BAN_MIN_FAILURES) {
+    banMap.set(stats.url, { url: stats.url, bannedAt: Date.now(), permanent: true });
+    saveBans();
+    console.warn(`[RPC] ${shorten(stats.url)} PERMA-BANNED: 0 success in ${stats.totalFailures} attempts`);
+  }
+}
 
 /** Built-in bundler base URL */
 const BUILTIN_BUNDLER = 'https://bundler.getvela.app';
@@ -81,6 +142,8 @@ async function ensurePool(chainId: number): Promise<void> {
 }
 
 async function initPool(chainId: number): Promise<void> {
+  await loadBans();
+
   const [rpcUrls, bundlerUrls] = await Promise.all([
     collectRpcUrls(chainId),
     collectBundlerUrls(chainId),
@@ -135,7 +198,7 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
   const seen = new Set<string>();
 
   const add = (url: string, source: EndpointStats['source']) => {
-    if (!url || seen.has(url)) return;
+    if (!url || seen.has(url) || isBanned(url)) return;
     seen.add(url);
     entries.push({ url, source });
   };
@@ -177,7 +240,7 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
   const defaultChainIds = new Set(DEFAULT_NETWORKS.map(n => n.chainId));
 
   const add = (url: string, source: EndpointStats['source']) => {
-    if (!url || seen.has(url)) return;
+    if (!url || seen.has(url) || isBanned(url)) return;
     seen.add(url);
     entries.push({ url, source });
   };
@@ -187,7 +250,7 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
     const config = await getNetworkConfig(chainId);
     if (config?.bundlerURL) {
       const defaultNet = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
-      // Skip if it's the unchanged default Pimlico URL (user never intentionally set it)
+      // Skip if it's the unchanged default URL (user never intentionally set it)
       if (!defaultNet || config.bundlerURL !== defaultNet.bundlerURL) {
         add(config.bundlerURL, 'user');
       }
@@ -384,6 +447,8 @@ export async function poolRpcCall(
       if (response.error && isPermanentRpcError(response.error)) {
         ep.banned = true;
         recordFailure(ep);
+        tempBan(ep.url);
+        maybePermaBan(ep);
         console.warn(`[RPC] ${method} → ${shorten(ep.url)} BANNED: ${response.error.message?.slice(0, 80)}`);
         continue;
       }
@@ -402,6 +467,8 @@ export async function poolRpcCall(
       if (err instanceof HttpBanError) {
         ep.banned = true;
         recordFailure(ep);
+        tempBan(ep.url);
+        maybePermaBan(ep);
         console.warn(`[RPC] ${method} → ${shorten(ep.url)} BANNED: ${err.message}`);
       } else {
         recordFailure(ep);
@@ -441,6 +508,8 @@ export async function poolBundlerCall(
       if (response.error && isPermanentRpcError(response.error)) {
         ep.banned = true;
         recordFailure(ep);
+        tempBan(ep.url);
+        maybePermaBan(ep);
         console.warn(`[Bundler] ${method} → ${shorten(ep.url)} BANNED: ${response.error.message?.slice(0, 80)}`);
         continue;
       }
@@ -458,6 +527,8 @@ export async function poolBundlerCall(
       if (err instanceof HttpBanError) {
         ep.banned = true;
         recordFailure(ep);
+        tempBan(ep.url);
+        maybePermaBan(ep);
         console.warn(`[Bundler] ${method} → ${shorten(ep.url)} BANNED: ${err.message}`);
       } else {
         recordFailure(ep);

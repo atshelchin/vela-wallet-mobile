@@ -64,6 +64,8 @@ const tokenCache = new Map<string, TokenCacheEntry>();
 export type FetchTokensOptions = {
   forceRefresh?: boolean;
   maxAgeMs?: number;
+  /** Called each time a chain finishes, with the accumulated tokens so far (sorted by USD value). */
+  onProgress?: (tokens: APIToken[]) => void;
 };
 
 export class APIError extends Error {
@@ -92,7 +94,7 @@ export async function fetchTokens(
     if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
   }
 
-  const request = fetchAllChainTokens(address);
+  const request = fetchAllChainTokens(address, options.onProgress);
   tokenCache.set(cacheKey, {
     fetchedAt: cached?.fetchedAt ?? 0,
     tokens: cached?.tokens ?? [],
@@ -131,36 +133,42 @@ export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
 // Core: orchestrate all chains
 // ---------------------------------------------------------------------------
 
-async function fetchAllChainTokens(address: string): Promise<APIToken[]> {
+async function fetchAllChainTokens(
+  address: string,
+  onProgress?: (tokens: APIToken[]) => void,
+): Promise<APIToken[]> {
   // Phase 1: load prerequisites in parallel
   const [customTokens, clPrices] = await Promise.all([
     loadCustomTokens(),
     fetchChainlinkPrices(),
   ]);
 
-  // Phase 2: query each chain in parallel (one multicall3 per chain)
+  // Phase 2: query each chain in parallel, streaming results as each chain finishes
   const networks = getAllNetworksSync();
-  const results = await Promise.allSettled(
+  const accumulated: APIToken[] = [];
+
+  const sortAndFilter = () =>
+    accumulated
+      .filter(t => parseFloat(t.balance) > 0)
+      .sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+
+  await Promise.allSettled(
     networks.map(net =>
       queryChainAssets(
         address,
         net.chainId,
         customTokens.filter(ct => ct.chainId === net.chainId),
         clPrices,
-      ),
+      ).then(chainTokens => {
+        if (chainTokens.length > 0) {
+          accumulated.push(...chainTokens);
+          onProgress?.(sortAndFilter());
+        }
+      }),
     ),
   );
 
-  // Flatten results
-  const tokens: APIToken[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') tokens.push(...r.value);
-  }
-
-  // Filter to non-zero balance, sort by USD value descending
-  return tokens
-    .filter(t => parseFloat(t.balance) > 0)
-    .sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+  return sortAndFilter();
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 import { chainName } from '@/models/network';
-import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue, type APIToken } from '@/models/types';
+import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { useFocusEffect } from '@react-navigation/native';
@@ -96,7 +96,13 @@ export default function HomeScreen() {
     loadInFlightRef.current = true;
     if (!silent) setLoading(true);
     try {
-      const result = await fetchTokens(address, { forceRefresh });
+      const result = await fetchTokens(address, {
+        forceRefresh,
+        onProgress: (partial) => {
+          setTokens(partial);
+          setLoading(false);
+        },
+      });
       setTokens(result);
     } catch (err) {
       if (!silent) {
@@ -147,7 +153,7 @@ export default function HomeScreen() {
         network: token.network,
         balance: token.balance,
         decimals: String(token.decimals),
-        logo: token.logo ?? '',
+        logos: JSON.stringify(tokenLogoURLs(token)),
         tokenAddress: token.tokenAddress ?? '',
         priceUsd: String(token.priceUsd ?? 0),
         chainName: token.chainName,
@@ -287,7 +293,7 @@ export default function HomeScreen() {
           <TokenRow
             symbol={item.symbol}
             chainLabel={chainName(tokenChainId(item))}
-            logoUrl={tokenLogoURL(item)}
+            logoUrls={tokenLogoURLs(item)}
             balance={formatBalance(tokenBalanceDouble(item))}
             usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
             onPress={() => navigateToToken(item)}
@@ -314,7 +320,7 @@ export default function HomeScreen() {
               <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
           </View>
-          <ScrollView style={styles.switcherScroll}>
+          <ScrollView style={styles.switcherScroll} contentContainerStyle={styles.switcherScrollContent}>
             {state.accounts.map((account, index) => {
               const isActive = index === state.activeAccountIndex;
               return (
@@ -338,6 +344,7 @@ export default function HomeScreen() {
                 </Pressable>
               );
             })}
+            <View style={styles.switcherEndLine} />
           </ScrollView>
         </View>
       </AppModal>
@@ -544,7 +551,17 @@ const styles = createStyles(() => ({
     color: color.fg.base,
   },
   switcherScroll: {
-    padding: space['3xl'],
+    paddingHorizontal: space['3xl'],
+    paddingTop: space['3xl'],
+  },
+  switcherScrollContent: {
+    paddingBottom: space['3xl'],
+  },
+  switcherEndLine: {
+    height: 1,
+    backgroundColor: color.border.base,
+    marginTop: space.lg,
+    marginBottom: space.xl,
   },
   switcherItem: {
     flexDirection: 'row',
