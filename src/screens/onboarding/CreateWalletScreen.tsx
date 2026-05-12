@@ -284,7 +284,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               editable={!loading}
             />
             <Text style={styles.hint}>
-              This name is stored locally and helps you identify your accounts.
+              This name is stored with your public key on-chain for cross-device sign-in.
             </Text>
 
             {/* Acknowledgment checklist */}
