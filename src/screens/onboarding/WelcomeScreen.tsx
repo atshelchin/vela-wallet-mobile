@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ActivityIndicator, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ActivityIndicator, Pressable, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -7,7 +7,14 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { fadeIn, fadeInUp } from '@/constants/entering';
-import { color, text, inter, space, radius, motion, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
+import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
+import { AppModal } from '@/components/ui/AppModal';
+import { loadServiceEndpoints, saveServiceEndpoints } from '@/services/storage';
+import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
+import type { ServiceEndpoints } from '@/models/types';
+import { Settings, X, RefreshCw, Sun, Moon, Monitor } from 'lucide-react-native';
+import { hapticLight } from '@/services/platform';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
