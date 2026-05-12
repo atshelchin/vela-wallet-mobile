@@ -4,6 +4,8 @@ A self-custodial smart wallet for EVM networks, built with React Native and Expo
 
 Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.
 
+Runs on **iOS**, **Android**, and **Web** from a single codebase.
+
 ## Get Started
 
 1. Install dependencies
@@ -15,8 +17,32 @@ Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentica
 2. Start the app
 
    ```bash
+   # iOS / Android
    npx expo start
+
+   # Web
+   npx expo start --web
    ```
+
+## Platform Support
+
+| Feature | iOS | Android | Web |
+|---------|-----|---------|-----|
+| Passkey (WebAuthn) | Native (ASAuthorization) | Native (Credential Manager) | `navigator.credentials` API |
+| Cloud Sync | iCloud Key-Value Store | Google Play BlockStore | IndexedDB (local only) |
+| QR Scanner | expo-camera | expo-camera | `getUserMedia` + jsQR |
+| Haptic Feedback | expo-haptics | expo-haptics | No-op |
+| Clipboard | expo-clipboard | expo-clipboard | `navigator.clipboard` |
+| In-App Browser | expo-web-browser | expo-web-browser | `window.open` |
+| BLE (DApp Connect) | VelaBLE native module | VelaBLE native module | Not supported (v1) |
+| Animated Balance | Reanimated worklet | Reanimated worklet | Plain text (no animation) |
+
+### Web Notes
+
+- **Passkey rpId**: Uses the registrable domain (e.g. `getvela.app`) so passkeys work across subdomains and are consistent with native.
+- **Cloud Sync**: Web uses IndexedDB for local persistence. No cross-device sync — accounts are stored in the browser only.
+- **DApp Connect**: BLE connection is not available on web. This is planned for a future release.
+- **Native APIs**: All platform-specific APIs (Alert, Clipboard, Haptics, AppState, Linking) are abstracted via `src/services/platform.ts`.
 
 ## Build for Web (Cloudflare Pages)
 
