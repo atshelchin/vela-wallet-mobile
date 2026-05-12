@@ -6,6 +6,7 @@ import type { Account } from '@/models/types';
 import * as Passkey from '@/modules/passkey';
 import { derSignatureToRaw } from '@/services/attestation-parser';
 import { keccak256 } from '@/services/eth-crypto';
+import { hashTypedData, type TypedData } from '@/services/eip712';
 import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
@@ -51,9 +52,12 @@ export async function handleSignTypedData(
   request: DAppRequest,
   account: Account,
 ): Promise<string> {
-  const jsonStr = JSON.stringify(request.params);
-  const jsonBytes = new TextEncoder().encode(jsonStr);
-  const dataToSign = keccak256(jsonBytes);
+  // EIP-712: params[1] is the typed data JSON string (or object)
+  const typedDataRaw = request.params[1] ?? request.params[0];
+  const typedData: TypedData = typeof typedDataRaw === 'string'
+    ? JSON.parse(typedDataRaw)
+    : typedDataRaw;
+  const dataToSign = hashTypedData(typedData);
 
   const assertion = await Passkey.sign(toHex(dataToSign), account.id);
   const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
