@@ -3,13 +3,13 @@ import { View, Text, ScrollView, Pressable, Linking } from 'react-native';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/use-safe-router';
 import { ArrowLeft, ExternalLink } from 'lucide-react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 
 export default function AboutScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
 
   return (
     <ScreenContainer>

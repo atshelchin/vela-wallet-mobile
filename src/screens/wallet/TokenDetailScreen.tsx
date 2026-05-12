@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useSafeRouter } from '@/hooks/use-safe-router';
 import * as Clipboard from 'expo-clipboard';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -14,7 +15,7 @@ import { chainName } from '@/models/network';
 import { Copy, Check, ArrowLeft } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const params = useLocalSearchParams<{
     symbol: string;
     name: string;

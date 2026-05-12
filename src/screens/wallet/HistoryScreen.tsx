@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useFocusEffect } from '@react-navigation/native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -70,7 +70,7 @@ function groupByDate(txs: LocalTransaction[]): TransactionGroup[] {
 // MARK: - Component
 
 export default function HistoryScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
 

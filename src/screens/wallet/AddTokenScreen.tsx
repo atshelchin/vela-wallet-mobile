@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, ScrollView, FlatList } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/use-safe-router';
 import Animated from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -157,7 +157,7 @@ function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n
 // ---------------------------------------------------------------------------
 
 export default function AddTokenScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
 
   const [contractAddress, setContractAddress] = useState('');
   const [selectedChainId, setSelectedChainId] = useState(1);
