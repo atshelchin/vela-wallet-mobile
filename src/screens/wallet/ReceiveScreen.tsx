@@ -299,7 +299,8 @@ export default function ReceiveScreen() {
 
   const [isListening, setIsListening] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
-  const [depositDetails, setDepositDetails] = useState<string | null>(null);
+  interface DepositEntry { time: string; items: { symbol: string; amount: string; network: string; usd: string | null }[] }
+  const [deposits, setDeposits] = useState<DepositEntry[]>([]);
   const previousTokens = useRef<APIToken[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -322,23 +323,25 @@ export default function ReceiveScreen() {
         if (previousTokens.current !== null) {
           // Diff: find tokens whose balance increased
           const prevMap = new Map(previousTokens.current.map(t => [tokenId(t), tokenBalanceDouble(t)]));
-          const changes: string[] = [];
+          const changes: DepositEntry['items'] = [];
           for (const t of tokens) {
             const prevBal = prevMap.get(tokenId(t)) ?? 0;
             const curBal = tokenBalanceDouble(t);
             if (curBal > prevBal) {
               const diff = curBal - prevBal;
-              const network = chainName(tokenChainId(t));
-              const usd = tokenUsdValue(t) > 0 ? ` (~$${(diff * (t.priceUsd ?? 0)).toFixed(2)})` : '';
-              changes.push(`+${formatBalance(diff)} ${t.symbol} on ${network}${usd}`);
+              changes.push({
+                symbol: t.symbol,
+                amount: formatBalance(diff),
+                network: chainName(tokenChainId(t)),
+                usd: t.priceUsd ? `$${(diff * t.priceUsd).toFixed(2)}` : null,
+              });
             }
           }
 
           if (changes.length > 0) {
             const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-            const entry = `${time}  ${changes.join(', ')}`;
             setDepositDetected(true);
-            setDepositDetails(prev => prev ? `${entry}\n${prev}` : entry);
+            setDeposits(prev => [{ time, items: changes }, ...prev]);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         }
@@ -456,15 +459,22 @@ export default function ReceiveScreen() {
                 <Text style={styles.listeningText}>Listening for deposits</Text>
               </Animated.View>
             )}
-            {depositDetected && (
-              <Animated.View style={styles.depositAlert} entering={fadeIn(0, 300)}>
-                <Check size={14} color={color.success.base} strokeWidth={3} />
-                <View>
-                  <Text style={styles.depositText}>Deposit received!</Text>
-                  {depositDetails && (
-                    <Text style={styles.depositDetails}>{depositDetails}</Text>
-                  )}
-                </View>
+            {depositDetected && deposits.length > 0 && (
+              <Animated.View style={styles.depositBox} entering={fadeIn(0, 300)}>
+                {deposits.map((entry, i) => (
+                  <View key={i} style={[styles.depositEntry, i > 0 && styles.depositEntryBorder]}>
+                    <View style={styles.depositHeader}>
+                      <View style={styles.depositDot} />
+                      <Text style={styles.depositTime}>{entry.time}</Text>
+                    </View>
+                    {entry.items.map((item, j) => (
+                      <View key={j} style={styles.depositRow}>
+                        <Text style={styles.depositAmount}>+{item.amount} {item.symbol}</Text>
+                        <Text style={styles.depositMeta}>{item.network}{item.usd ? `  ${item.usd}` : ''}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
               </Animated.View>
             )}
           </VelaCard>
@@ -665,12 +675,56 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.success.base,
   },
-  depositDetails: {
-    fontSize: text.sm,
+  depositBox: {
+    backgroundColor: color.success.soft,
+    borderRadius: radius.lg,
+    marginTop: space.lg,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  depositEntry: {
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+  },
+  depositEntryBorder: {
+    borderTopWidth: 1,
+    borderTopColor: color.success.base + '20',
+  },
+  depositHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.sm,
+  },
+  depositDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: color.success.base,
+  },
+  depositTime: {
+    fontSize: text.xs,
     ...inter.medium,
     color: color.success.base,
-    marginTop: space.xs,
-    lineHeight: 18,
+    opacity: 0.7,
+  },
+  depositRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingLeft: 14,
+    marginTop: 2,
+  },
+  depositAmount: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.success.base,
+  },
+  depositMeta: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.success.base,
+    opacity: 0.7,
   },
 
   // Networks — compact chip grid
