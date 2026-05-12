@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Pressable, ScrollView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import Animated from 'react-native-reanimated';
@@ -8,10 +8,10 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, inter, space, radius, shadow, font, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
-import { Copy, ArrowLeft } from 'lucide-react-native';
+import { Copy, Check, ArrowLeft } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
   const router = useRouter();
@@ -36,7 +36,6 @@ export default function TokenDetailScreen() {
   const contractAddress = params.tokenAddress || null;
   const network = params.network ?? '';
   const decimals = parseInt(params.decimals ?? '18', 10);
-  const isNative = !contractAddress;
 
   const chainIdMap: Record<string, number> = {
     'eth-mainnet': 1,
@@ -53,10 +52,12 @@ export default function TokenDetailScreen() {
   const formatUsd = (value: number) =>
     '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const [copied, setCopied] = useState(false);
   const copyContract = async () => {
     if (!contractAddress) return;
     await Clipboard.setStringAsync(contractAddress);
-    Alert.alert('Copied', 'Contract address copied to clipboard.');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const handleSend = () => {
@@ -82,72 +83,80 @@ export default function TokenDetailScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        {/* Token header */}
-        <Animated.View style={styles.tokenHeader} entering={fadeIn(0, 400)}>
-          <TokenLogo symbol={symbol} logoUrls={logoUrls} size={72} />
-          <Text style={styles.tokenName}>{tokenName}</Text>
-          <View style={styles.chainBadge}>
-            <Text style={styles.chainBadgeText}>{chain}</Text>
-          </View>
-        </Animated.View>
-
-        {/* Balance card */}
-        <Animated.View entering={fadeInDown(100, 400)}>
-          <VelaCard elevated style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>Balance</Text>
-            <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
-              {formatBalance(balance)} {symbol}
-            </Text>
-            {usdValue > 0 && (
-              <Text style={styles.usdValue}>{formatUsd(usdValue)}</Text>
-            )}
-            {priceUsd > 0 && (
-              <Text style={styles.priceLabel}>
-                1 {symbol} = {formatUsd(priceUsd)}
-              </Text>
-            )}
+        {/* Hero card — logo, name, network, balance, USD */}
+        <Animated.View entering={fadeIn(0, 400)}>
+          <VelaCard elevated style={styles.heroCard}>
+            <View style={styles.heroRow}>
+              <TokenLogo symbol={symbol} logoUrls={logoUrls} size={44} />
+              <View style={styles.heroIdentity}>
+                <Text style={styles.heroSymbol}>{symbol}</Text>
+                <Text style={styles.heroChain}>{chain}</Text>
+              </View>
+              <View style={styles.heroBalance}>
+                <Text style={styles.heroAmount} adjustsFontSizeToFit numberOfLines={1}>
+                  {formatBalance(balance)}
+                </Text>
+                {usdValue > 0 && (
+                  <Text style={styles.heroUsd} adjustsFontSizeToFit numberOfLines={1}>
+                    {formatUsd(usdValue)}
+                  </Text>
+                )}
+              </View>
+            </View>
           </VelaCard>
         </Animated.View>
 
         {/* Action buttons */}
-        <Animated.View style={styles.buttonRow} entering={fadeInDown(200, 400)}>
+        <Animated.View style={styles.buttonRow} entering={fadeInDown(100, 400)}>
           <VelaButton title="Send" onPress={handleSend} style={styles.actionBtn} />
           <VelaButton title="Receive" onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
         </Animated.View>
 
-        {/* Token info */}
-        <Animated.View entering={fadeInDown(300, 400)}>
-          <VelaCard style={styles.infoCard}>
-            <InfoRow label="Type" value={isNative ? 'Native' : 'ERC-20'} />
-            <View style={styles.separator} />
-            <InfoRow label="Network" value={chain} />
-            <View style={styles.separator} />
-            <InfoRow label="Decimals" value={String(decimals)} />
-            {contractAddress && (
-              <>
-                <View style={styles.separator} />
-                <Pressable onPress={copyContract} style={styles.contractRow}>
-                  <Text style={styles.infoLabel}>Contract</Text>
-                  <View style={styles.infoValueRow}>
-                    <Text style={styles.infoValue}>{shortAddr(contractAddress)}</Text>
-                    <Copy size={12} color={color.accent.base} />
-                  </View>
-                </Pressable>
-              </>
-            )}
-          </VelaCard>
+        {/* Details — contract, decimals, unit price */}
+        <Animated.View entering={fadeInDown(200, 400)} style={styles.detailSection}>
+          {tokenName !== symbol && (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Name</Text>
+                <Text style={styles.detailValue}>{tokenName}</Text>
+              </View>
+              <View style={styles.separator} />
+            </>
+          )}
+          {contractAddress && (
+            <Pressable onPress={copyContract} style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Contract</Text>
+              <View style={styles.detailValueRow}>
+                <Text style={styles.detailValue}>{shortAddr(contractAddress)}</Text>
+                {copied ? (
+                  <Check size={12} color={color.success.base} strokeWidth={3} />
+                ) : (
+                  <Copy size={12} color={color.fg.subtle} />
+                )}
+              </View>
+            </Pressable>
+          )}
+          {contractAddress && (
+            <>
+              <View style={styles.separator} />
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Decimals</Text>
+                <Text style={styles.detailValue}>{decimals}</Text>
+              </View>
+            </>
+          )}
+          {priceUsd > 0 && (
+            <>
+              {contractAddress && <View style={styles.separator} />}
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Price</Text>
+                <Text style={styles.detailValue}>1 {symbol} = {formatUsd(priceUsd)}</Text>
+              </View>
+            </>
+          )}
         </Animated.View>
       </ScrollView>
     </ScreenContainer>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
   );
 }
 
@@ -174,59 +183,44 @@ const styles = createStyles(() => ({
   },
   navSpacer: { minWidth: 50 },
 
-  // Token header
-  tokenHeader: {
-    alignItems: 'center',
-    paddingVertical: space['3xl'],
-    gap: space.md,
+  // Hero card
+  heroCard: {
+    padding: space['2xl'],
+    marginBottom: space['2xl'],
   },
-  tokenName: {
-    fontSize: text['2xl'],
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+  },
+  heroIdentity: {
+    flex: 1,
+    gap: 2,
+  },
+  heroSymbol: {
+    fontSize: text.lg,
     ...inter.bold,
     color: color.fg.base,
   },
-  chainBadge: {
-    backgroundColor: color.bg.sunken,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    borderRadius: radius.full,
-  },
-  chainBadgeText: {
+  heroChain: {
     fontSize: text.sm,
     ...inter.medium,
-    color: color.fg.muted,
+    color: color.fg.subtle,
   },
-
-  // Balance card
-  balanceCard: {
-    padding: space['3xl'],
-    alignItems: 'center',
-    gap: space.md,
-    marginBottom: space['2xl'],
+  heroBalance: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
-  balanceLabel: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  balanceValue: {
-    fontSize: text['4xl'],
+  heroAmount: {
+    fontSize: text.xl,
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
   },
-  usdValue: {
-    fontSize: text.xl,
-    ...inter.semibold,
-    color: color.fg.muted,
-  },
-  priceLabel: {
+  heroUsd: {
     fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    marginTop: space.xs,
+    ...inter.medium,
+    color: color.fg.muted,
   },
 
   // Buttons
@@ -239,35 +233,29 @@ const styles = createStyles(() => ({
     flex: 1,
   },
 
-  // Info card
-  infoCard: {
-    padding: space['2xl'],
+  // Detail section
+  detailSection: {
+    paddingHorizontal: space.lg,
   },
-  infoRow: {
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: space.lg,
   },
-  contractRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: space.lg,
-  },
-  infoLabel: {
-    fontSize: text.base,
+  detailLabel: {
+    fontSize: text.sm,
     ...inter.regular,
-    color: color.fg.muted,
+    color: color.fg.subtle,
   },
-  infoValueRow: {
+  detailValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
   },
-  infoValue: {
-    fontSize: text.base,
-    ...inter.semibold,
+  detailValue: {
+    fontSize: text.sm,
+    ...inter.medium,
     color: color.fg.base,
   },
   separator: {
