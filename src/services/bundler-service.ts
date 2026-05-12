@@ -104,8 +104,11 @@ export async function checkBundlerFunding(
 
   if (info.spendableBalance >= threshold) return null;
 
-  // Recommend enough for ~10M gas worth of transactions
-  const recommendedWei = await estimateRecommendedFunding(chainId);
+  // Recommend the amount needed plus 20% buffer so the user doesn't need
+  // to top up again immediately for the next transaction.
+  const deficit = threshold - info.spendableBalance;
+  const base = deficit > 0n ? deficit : threshold;
+  const recommendedWei = (base * 12n) / 10n;
 
   return {
     depositAddress: info.depositAddress,
