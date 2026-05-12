@@ -106,6 +106,14 @@ function maybePermaBan(stats: EndpointStats): void {
   }
 }
 
+/** Chains where ALL RPC endpoints failed on the last attempt. Cleared on success. */
+const rpcFailedChains = new Set<number>();
+
+/** Get the set of chain IDs whose RPC endpoints are all currently failing. */
+export function getFailedRpcChains(): ReadonlySet<number> {
+  return rpcFailedChains;
+}
+
 /** Built-in bundler base URL */
 const BUILTIN_BUNDLER = 'https://bundler.getvela.app';
 
@@ -461,6 +469,7 @@ export async function poolRpcCall(
       }
 
       recordSuccess(ep, ms);
+      rpcFailedChains.delete(chainId);
       console.log(`[RPC] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 60) : 'OK'}`);
       return response;
     } catch (err) {
@@ -477,6 +486,7 @@ export async function poolRpcCall(
     }
   }
 
+  rpcFailedChains.add(chainId);
   throw new Error(`All RPC endpoints failed for chain ${chainId}`);
 }
 
@@ -557,8 +567,12 @@ function shorten(url: string): string {
 export async function isUsingBuiltinBundler(chainId: number): Promise<boolean> {
   await ensurePool(chainId);
   const pool = bundlerPools.get(chainId) ?? [];
-  const userEndpoints = pool.filter(e => e.source === 'user' && e.consecutiveFailures === 0);
-  return userEndpoints.length === 0;
+  // Check if any healthy non-vela bundler exists.
+  // User-configured endpoints pointing at bundler.getvela.app still count as built-in.
+  const externalEndpoints = pool.filter(
+    e => e.source === 'user' && e.consecutiveFailures === 0 && !e.url.includes('bundler.getvela.app'),
+  );
+  return externalEndpoints.length === 0;
 }
 
 /** Get the built-in bundler base URL (for REST API calls). */

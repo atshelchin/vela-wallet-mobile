@@ -61,6 +61,12 @@ export interface TransactionResult {
   txHash: string;
 }
 
+export interface SubmitResult {
+  userOpHash: string;
+  /** Resolves to txHash once the receipt is available. */
+  waitForTxHash: () => Promise<string>;
+}
+
 interface GasEstimate {
   verificationGasLimit: bigint;
   callGasLimit: bigint;
@@ -85,7 +91,7 @@ export async function sendNative(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-): Promise<TransactionResult> {
+): Promise<SubmitResult> {
   const callData = buildExecuteCallData(to, valueWei, new Uint8Array(0));
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
 }
@@ -99,7 +105,7 @@ export async function sendERC20(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-): Promise<TransactionResult> {
+): Promise<SubmitResult> {
   const transferSelector = functionSelector('transfer(address,uint256)');
   const transferData = concatBytes(
     transferSelector,
@@ -120,7 +126,7 @@ export async function sendContractCall(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-): Promise<TransactionResult> {
+): Promise<SubmitResult> {
   const callData = buildExecuteCallData(to, valueWei, data);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
 }
@@ -167,7 +173,7 @@ async function sendUserOp(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-): Promise<TransactionResult> {
+): Promise<SubmitResult> {
   // 0. Pre-check: verify critical contracts exist on this chain
   await verifyChainReady(chainId);
 
@@ -267,10 +273,11 @@ async function sendUserOp(
   // 11. Submit to bundler
   const userOpHash = await submitUserOp(userOp, chainId);
 
-  // 12. Wait for receipt
-  const txHash = await waitForReceipt(userOpHash, chainId);
-
-  return { userOpHash, txHash };
+  // Return immediately — caller can await txHash separately
+  return {
+    userOpHash,
+    waitForTxHash: () => waitForReceipt(userOpHash, chainId),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -822,7 +829,7 @@ function parseBundlerError(error: any): string {
 
   const msg = error.message ?? error.data ?? '';
 
-  // Common Pimlico / bundler errors
+  // Common bundler errors
   if (msg.includes('insufficient funds') || msg.includes('balance too low'))
     return 'Insufficient balance to cover gas fees. Please fund your account.';
   if (msg.includes('could not load bundle') || msg.includes('simulation failed'))

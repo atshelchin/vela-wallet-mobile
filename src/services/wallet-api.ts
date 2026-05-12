@@ -1,9 +1,8 @@
 /**
  * On-chain asset query engine.
  *
- * Replaces the Alchemy-backed getvela.app/api/wallet endpoint with direct
- * on-chain queries using Multicall3. Each network is queried with a single
- * eth_call containing batched balance + DEX price queries.
+ * Direct on-chain queries using Multicall3. Each network is queried with a
+ * single eth_call containing batched balance + DEX price queries.
  *
  * Architecture:
  *   1. Discover tokens per chain (native + stablecoins + wrapped native + custom ERC-20s)
@@ -17,7 +16,7 @@ import type { APIToken, CustomToken } from '@/models/types';
 import { tokenUsdValue } from '@/models/types';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from '@/models/network';
 import { loadCustomTokens } from './storage';
-import { poolRpcCall } from './rpc-pool';
+import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from './price-service';
 import {
@@ -66,6 +65,8 @@ export type FetchTokensOptions = {
   maxAgeMs?: number;
   /** Called each time a chain finishes, with the accumulated tokens so far (sorted by USD value). */
   onProgress?: (tokens: APIToken[]) => void;
+  /** Called after all chains finish, with the chain IDs whose RPC endpoints all failed. */
+  onFailedChains?: (chainIds: number[]) => void;
 };
 
 export class APIError extends Error {
@@ -94,7 +95,7 @@ export async function fetchTokens(
     if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
   }
 
-  const request = fetchAllChainTokens(address, options.onProgress);
+  const request = fetchAllChainTokens(address, options.onProgress, options.onFailedChains);
   tokenCache.set(cacheKey, {
     fetchedAt: cached?.fetchedAt ?? 0,
     tokens: cached?.tokens ?? [],
@@ -136,6 +137,7 @@ export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
 async function fetchAllChainTokens(
   address: string,
   onProgress?: (tokens: APIToken[]) => void,
+  onFailedChains?: (chainIds: number[]) => void,
 ): Promise<APIToken[]> {
   // Phase 1: load prerequisites in parallel
   const [customTokens, clPrices] = await Promise.all([
@@ -167,6 +169,12 @@ async function fetchAllChainTokens(
       }),
     ),
   );
+
+  // Report chains where all RPC endpoints failed
+  const failed = networks
+    .map(n => n.chainId)
+    .filter(id => getFailedRpcChains().has(id));
+  if (failed.length > 0) onFailedChains?.(failed);
 
   return sortAndFilter();
 }

@@ -416,12 +416,43 @@ function withAndroidDependencies(config) {
 // Main plugin – composes all sub-plugins
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// iOS – Inject Mac IP into ip.txt for physical device Metro discovery
+// ---------------------------------------------------------------------------
+
+function withMetroHostInjection(config) {
+  return withXcodeProject(config, (mod) => {
+    const project = mod.modResults;
+    const target = project.getFirstTarget().uuid;
+    const shellScript =
+      'if [ "$CONFIGURATION" = "Debug" ]; then\n' +
+      '  IP=$(ipconfig getifaddr en0 || echo "localhost")\n' +
+      '  echo "$IP" > "${CONFIGURATION_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ip.txt"\n' +
+      'fi\n';
+
+    // Avoid adding duplicate
+    const buildPhases = project.hash.project.objects.PBXShellScriptBuildPhase || {};
+    const alreadyExists = Object.values(buildPhases).some(
+      (phase) => typeof phase === 'object' && phase.name === '"Inject Metro Host IP"'
+    );
+    if (!alreadyExists) {
+      project.addBuildPhase([], 'PBXShellScriptBuildPhase', 'Inject Metro Host IP', target, {
+        shellPath: '/bin/sh',
+        shellScript,
+      });
+    }
+
+    return mod;
+  });
+}
+
 function withNativeModules(config) {
   // iOS
   config = withIOSInfoPlist(config);
   config = withIOSEntitlements(config);
   config = withIOSSourceFiles(config);
   config = withXcodeProjectFiles(config);
+  config = withMetroHostInjection(config);
 
   // Android
   config = withAndroidPermissions(config);

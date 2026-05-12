@@ -14,7 +14,9 @@
         "NSBluetoothAlwaysUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
         "NSBluetoothPeripheralUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
         "NSCameraUsageDescription": "Vela Wallet uses the camera to scan QR codes for wallet addresses.",
-        "UIBackgroundModes": ["bluetooth-peripheral"]
+        "UIBackgroundModes": [
+          "bluetooth-peripheral"
+        ]
       }
     },
     "android": {
@@ -59,7 +61,8 @@
           "imageWidth": 180
         }
       ],
-      "./plugins/with-native-modules"
+      "./plugins/with-native-modules",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

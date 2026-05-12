@@ -13,6 +13,7 @@ import {
   PanResponder,
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, createStyles } from '@/constants/theme';
@@ -29,9 +30,14 @@ export function AppModal({ visible, children, onClose }: Props) {
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.nativeRoot}>
           <DragHandle onClose={onClose} />
-          <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
-            {children}
-          </SafeAreaView>
+          <KeyboardAvoidingView
+            style={styles.nativeContent}
+            behavior="padding"
+          >
+            <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
+              {children}
+            </SafeAreaView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     );

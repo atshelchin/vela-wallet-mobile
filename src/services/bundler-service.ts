@@ -159,7 +159,8 @@ export async function fetchBundlerAccountInfo(
 
     infoCache.set(key, { info, at: Date.now() });
     return info;
-  } catch {
+  } catch (err) {
+    console.warn(`[BundlerFunding] Failed to fetch account info for chain=${chainId}:`, err);
     return null;
   }
 }

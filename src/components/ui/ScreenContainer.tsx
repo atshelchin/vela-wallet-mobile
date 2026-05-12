@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, type ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, createStyles } from '@/constants/theme';
 import { useTextScale } from '@/constants/text-scale';
@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * Standard screen wrapper with safe area and consistent padding.
+ * Standard screen wrapper with safe area, consistent padding, and keyboard avoidance.
  *
  * Subscribes to text scale context so that when the user changes text size
  * in Settings, this component re-renders.  Because the parent screen also
@@ -27,7 +27,12 @@ export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
   return (
     <View style={[styles.container, style]}>
       <SafeAreaView style={styles.safeArea} edges={edges}>
-        {children}
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoiding}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {children}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
@@ -41,5 +46,8 @@ const styles = createStyles(() => ({
   safeArea: {
     flex: 1,
     paddingHorizontal: space['3xl'],
+  },
+  keyboardAvoiding: {
+    flex: 1,
   },
 }));

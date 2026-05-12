@@ -81,9 +81,10 @@ export default function OnboardingScreen() {
       console.log('[Login] Not found in CloudSync');
 
       // 4. Try public key index server
-      console.log('[Login] Querying server: rpId=', Passkey.RELYING_PARTY, 'credentialId=', assertion.credentialId);
+      const rpId = Passkey.getRelyingPartyId();
+      console.log('[Login] Querying server: rpId=', rpId, 'credentialId=', assertion.credentialId);
       const record = await PublicKeyIndex.queryRecord(
-        Passkey.RELYING_PARTY,
+        rpId,
         assertion.credentialId,
       );
       console.log('[Login] Server returned:', record.name, 'publicKey:', record.publicKey.slice(0, 16) + '...');

@@ -4,7 +4,7 @@
  * Flow: createRecord → verify (no signature needed, server signs on-chain tx)
  */
 import * as PublicKeyIndex from './public-key-index';
-import { RELYING_PARTY } from '@/modules/passkey';
+import { getRelyingPartyId } from '@/modules/passkey';
 import { fromHex } from './hex';
 import { loadPendingUploads, removePendingUpload } from './storage';
 
@@ -77,7 +77,7 @@ export async function uploadPublicKey(params: {
 
   // 1. Upload to server (no challenge/signature needed)
   await PublicKeyIndex.createRecord({
-    rpId: RELYING_PARTY,
+    rpId: getRelyingPartyId(),
     credentialId,
     publicKey: publicKeyHex,
     name,
@@ -85,7 +85,7 @@ export async function uploadPublicKey(params: {
   console.log('[PublicKeyUpload] Upload SUCCESS for:', name);
 
   // 2. Verify: query server to confirm the record exists
-  const record = await PublicKeyIndex.queryRecord(RELYING_PARTY, credentialId);
+  const record = await PublicKeyIndex.queryRecord(getRelyingPartyId(), credentialId);
   if (record.publicKey !== publicKeyHex) {
     throw new Error('Server verification failed: public key mismatch');
   }

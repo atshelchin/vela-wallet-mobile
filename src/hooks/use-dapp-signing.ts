@@ -82,7 +82,7 @@ export async function handleSendTransaction(
   publicKeyHex = stored?.publicKeyHex;
 
   if (!publicKeyHex) {
-    const record = await PublicKeyIndex.queryRecord(Passkey.RELYING_PARTY, account.id);
+    const record = await PublicKeyIndex.queryRecord(Passkey.getRelyingPartyId(), account.id);
     publicKeyHex = record.publicKey;
   }
 
@@ -117,7 +117,7 @@ export async function handleSendTransaction(
     txResult = await sendContractCall(safeAddress, to, valueClean, txData, chainId, publicKeyHex, signFn);
   }
 
-  return txResult.txHash;
+  return await txResult.waitForTxHash();
 }
 
 /**

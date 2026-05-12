@@ -20,7 +20,18 @@ const isWeb = Platform.OS === 'web';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const RELYING_PARTY = 'getvela.app';
+export const RELYING_PARTY_NATIVE = 'getvela.app';
+
+/** Web: use current hostname so rpId matches the origin. Native: always getvela.app. */
+export function getRelyingPartyId(): string {
+  if (isWeb && typeof window !== 'undefined') {
+    return window.location.hostname;
+  }
+  return RELYING_PARTY_NATIVE;
+}
+
+/** @deprecated Use getRelyingPartyId() — kept for backward compat in imports */
+export const RELYING_PARTY = RELYING_PARTY_NATIVE;
 
 // ---------------------------------------------------------------------------
 // Error model
@@ -126,7 +137,7 @@ async function webRegister(userName: string): Promise<PasskeyRegistrationResult>
   try {
     const credential = await navigator.credentials.create({
       publicKey: {
-        rp: { id: RELYING_PARTY, name: 'Vela Wallet' },
+        rp: { id: getRelyingPartyId(), name: 'Vela Wallet' },
         user: {
           id: userId,
           name: userName,
@@ -169,7 +180,7 @@ async function webAuthenticate(): Promise<PasskeyAssertionResult> {
     const credential = await navigator.credentials.get({
       publicKey: {
         challenge,
-        rpId: RELYING_PARTY,
+        rpId: getRelyingPartyId(),
         userVerification: 'required',
       },
     }) as PublicKeyCredential | null;
@@ -193,7 +204,7 @@ async function webSign(
 
   const options: PublicKeyCredentialRequestOptions = {
     challenge: challenge as BufferSource,
-    rpId: RELYING_PARTY,
+    rpId: getRelyingPartyId(),
     userVerification: 'required',
   };
 

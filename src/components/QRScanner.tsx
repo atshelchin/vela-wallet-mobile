@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Platform, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
-import { X, SwitchCamera, Camera } from 'lucide-react-native';
+import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
 
 interface Props {
   visible: boolean;
   onScan: (data: string) => void;
   onClose: () => void;
+}
+
+/** Parse ethereum: URI or raw address from scanned data. */
+function parseAddress(data: string): string {
+  let address = data.trim();
+  if (address.startsWith('ethereum:')) {
+    address = address.replace('ethereum:', '').split('?')[0].split('@')[0];
+  }
+  return address;
 }
 
 export function QRScanner({ visible, onScan, onClose }: Props) {
@@ -19,15 +30,47 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
     setScanned(true);
-
-    // Parse ethereum: URI scheme if present
-    let address = data;
-    if (data.startsWith('ethereum:')) {
-      address = data.replace('ethereum:', '').split('?')[0].split('@')[0];
-    }
-
-    onScan(address);
+    onScan(parseAddress(data));
     setTimeout(() => setScanned(false), 2000);
+  }
+
+  async function handlePickImage() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const uri = result.assets[0].uri;
+
+      if (Platform.OS === 'web') {
+        // Web: decode via canvas + jsQR
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(bitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+        const code = jsQR(imageData.data as any, imageData.width, imageData.height);
+        if (code?.data) {
+          onScan(parseAddress(code.data));
+        } else {
+          Alert.alert('No QR Found', 'Could not find a QR code in the selected image.');
+        }
+      } else {
+        // Native: use expo-camera's built-in image scanner
+        const barcodes = await scanFromURLAsync(uri, ['qr']);
+        if (barcodes.length > 0 && barcodes[0].data) {
+          onScan(parseAddress(barcodes[0].data));
+        } else {
+          Alert.alert('No QR Found', 'Could not find a QR code in the selected image.');
+        }
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to scan the image.');
+    }
   }
 
   if (!visible) return null;
@@ -86,9 +129,15 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           </View>
         )}
 
-        <Text style={styles.hint}>
-          Point the camera at a QR code containing a wallet address
-        </Text>
+        <View style={styles.footer}>
+          <Pressable style={styles.galleryBtn} onPress={handlePickImage}>
+            <ImagePlus size={18} color={color.accent.base} strokeWidth={2} />
+            <Text style={styles.galleryText}>Pick from Photos</Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            Point camera at a QR code, or select an image
+          </Text>
+        </View>
       </View>
     </AppModal>
   );
@@ -207,13 +256,31 @@ const styles = createStyles(() => ({
     width: '100%',
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  hint: {
+  footer: {
+    alignItems: 'center',
+    gap: space.lg,
+    paddingVertical: space['2xl'],
+    paddingBottom: space['5xl'],
+  },
+  galleryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: space['2xl'],
+    paddingVertical: space.lg,
+    borderRadius: radius.full,
+  },
+  galleryText: {
     fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+  },
+  hint: {
+    fontSize: text.sm,
     ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
     paddingHorizontal: space['5xl'],
-    paddingVertical: space['3xl'],
-    paddingBottom: space['5xl'],
   },
 }));
