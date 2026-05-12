@@ -11,7 +11,7 @@ import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { copyToClipboard, hapticSuccess, hapticLight, isAppActive } from '@/services/platform';
-import { ArrowLeft, Check, Copy, Share2 } from 'lucide-react-native';
+import { ArrowLeft, Check, Copy, Share2, ShieldAlert } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -307,6 +307,7 @@ export default function ReceiveScreen() {
   const previousTokens = useRef<APIToken[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [warningDismissed, setWarningDismissed] = useState(false);
   const previousBalance = useRef<number | null>(null);
   const shareCardRef = useRef<View>(null);
 
@@ -420,67 +421,92 @@ export default function ReceiveScreen() {
 
         {/* QR Card */}
         <Animated.View entering={fadeInDown(100, 400)}>
-          <VelaCard elevated style={styles.qrCard}>
-            {/* Identity */}
-            <Text style={styles.walletName}>{accountName}</Text>
-            <Pressable onPress={copyAddress} style={styles.addressRow}>
-              <Text style={styles.addressText} numberOfLines={1}>{truncatedAddress}</Text>
-              {copied ? (
-                <Check size={14} color={color.success.base} strokeWidth={2.5} />
-              ) : (
-                <Copy size={14} color={color.fg.subtle} strokeWidth={1.8} />
-              )}
-            </Pressable>
+          <View style={styles.qrCardWrap}>
+            <VelaCard elevated style={styles.qrCard}>
+              {/* Identity */}
+              <Text style={styles.walletName}>{accountName}</Text>
+              <Pressable onPress={warningDismissed ? copyAddress : undefined} style={styles.addressRow}>
+                <Text style={styles.addressText} numberOfLines={1}>{truncatedAddress}</Text>
+                {copied ? (
+                  <Check size={14} color={color.success.base} strokeWidth={2.5} />
+                ) : (
+                  <Copy size={14} color={color.fg.subtle} strokeWidth={1.8} />
+                )}
+              </Pressable>
 
-            {/* QR */}
-            <View style={styles.qrBorder}>
-              {address ? (
-                <QRCode value={address} size={200} />
-              ) : (
-                <View style={styles.qrPlaceholder}>
-                  <Text style={styles.qrPlaceholderText}>No address</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Share */}
-            <Pressable
-              onPress={shareAsImage}
-              style={styles.shareBtn}
-              disabled={sharing}
-            >
-              <Share2 size={16} color={color.fg.base} strokeWidth={2} />
-              <Text style={styles.shareBtnText}>
-                {sharing ? 'Generating...' : 'Share'}
-              </Text>
-            </Pressable>
-
-            {/* Status */}
-            {isListening && !depositDetected && (
-              <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
-                <PulsingDot />
-                <Text style={styles.listeningText}>Listening for deposits</Text>
-              </Animated.View>
-            )}
-            {depositDetected && deposits.length > 0 && (
-              <Animated.View style={styles.depositBox} entering={fadeIn(0, 300)}>
-                {deposits.map((entry, i) => (
-                  <View key={i} style={[styles.depositEntry, i > 0 && styles.depositEntryBorder]}>
-                    <View style={styles.depositHeader}>
-                      <View style={styles.depositDot} />
-                      <Text style={styles.depositTime}>{entry.time}</Text>
-                    </View>
-                    {entry.items.map((item, j) => (
-                      <View key={j} style={styles.depositRow}>
-                        <Text style={styles.depositAmount}>+{item.amount} {item.symbol}</Text>
-                        <Text style={styles.depositMeta}>{item.network}{item.usd ? `  ${item.usd}` : ''}</Text>
-                      </View>
-                    ))}
+              {/* QR */}
+              <View style={styles.qrBorder}>
+                {address ? (
+                  <QRCode value={address} size={200} />
+                ) : (
+                  <View style={styles.qrPlaceholder}>
+                    <Text style={styles.qrPlaceholderText}>No address</Text>
                   </View>
-                ))}
-              </Animated.View>
+                )}
+              </View>
+
+              {/* Share */}
+              <Pressable
+                onPress={warningDismissed ? shareAsImage : undefined}
+                style={styles.shareBtn}
+                disabled={sharing || !warningDismissed}
+              >
+                <Share2 size={16} color={color.fg.base} strokeWidth={2} />
+                <Text style={styles.shareBtnText}>
+                  {sharing ? 'Generating...' : 'Share'}
+                </Text>
+              </Pressable>
+
+              {/* Status */}
+              {isListening && !depositDetected && warningDismissed && (
+                <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
+                  <PulsingDot />
+                  <Text style={styles.listeningText}>Listening for deposits</Text>
+                </Animated.View>
+              )}
+              {depositDetected && deposits.length > 0 && (
+                <Animated.View style={styles.depositBox} entering={fadeIn(0, 300)}>
+                  {deposits.map((entry, i) => (
+                    <View key={i} style={[styles.depositEntry, i > 0 && styles.depositEntryBorder]}>
+                      <View style={styles.depositHeader}>
+                        <View style={styles.depositDot} />
+                        <Text style={styles.depositTime}>{entry.time}</Text>
+                      </View>
+                      {entry.items.map((item, j) => (
+                        <View key={j} style={styles.depositRow}>
+                          <Text style={styles.depositAmount}>+{item.amount} {item.symbol}</Text>
+                          <Text style={styles.depositMeta}>{item.network}{item.usd ? `  ${item.usd}` : ''}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </Animated.View>
+              )}
+            </VelaCard>
+
+            {/* Warning overlay */}
+            {!warningDismissed && (
+              <View style={styles.warningOverlay}>
+                <View style={styles.warningContent}>
+                  <View style={styles.warningIconWrap}>
+                    <ShieldAlert size={28} color={color.warning.base} strokeWidth={2} />
+                  </View>
+                  <Text style={styles.warningTitle}>Before you receive</Text>
+                  <Text style={styles.warningText}>
+                    Sending assets from unsupported networks to this address may result in permanent loss.
+                  </Text>
+                  <Text style={styles.warningHint}>
+                    Please review the supported networks listed under{' '}
+                    <Text style={styles.warningHintBold}>Works on {networks.length} EVM networks</Text>
+                    {' '}below before sharing your address.
+                  </Text>
+                  <Pressable style={styles.warningBtn} onPress={() => setWarningDismissed(true)}>
+                    <Text style={styles.warningBtnText}>I Understand</Text>
+                  </Pressable>
+                </View>
+              </View>
             )}
-          </VelaCard>
+          </View>
         </Animated.View>
 
         {/* Networks */}
@@ -579,13 +605,84 @@ const styles = createStyles(() => ({
   },
   headerSpacer: { minWidth: 50 },
 
+  // QR Card wrapper (for overlay positioning)
+  qrCardWrap: {
+    position: 'relative',
+    marginBottom: space.xl,
+  },
+
+  // Warning overlay
+  warningOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: color.bg.base + 'F0',
+    borderRadius: radius['2xl'],
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space['3xl'],
+  },
+  warningContent: {
+    alignItems: 'center',
+    gap: space.lg,
+  },
+  warningIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: color.warning.soft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.sm,
+  },
+  warningTitle: {
+    fontSize: text.xl,
+    ...inter.bold,
+    color: color.fg.base,
+    textAlign: 'center',
+  },
+  warningText: {
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  warningHint: {
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  warningHintBold: {
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  warningBtn: {
+    backgroundColor: color.warning.base,
+    borderRadius: radius.lg,
+    paddingVertical: space.lg,
+    paddingHorizontal: space['4xl'],
+    marginTop: space.lg,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  warningBtnText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: '#FFFFFF',
+  },
+
   // QR Card
   qrCard: {
     padding: space['3xl'],
     paddingTop: space['4xl'],
     paddingBottom: space['2xl'],
     alignItems: 'center',
-    marginBottom: space.xl,
   },
   walletName: {
     fontSize: text['2xl'],

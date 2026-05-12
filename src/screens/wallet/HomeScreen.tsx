@@ -174,11 +174,13 @@ export default function HomeScreen() {
     transform: [{ rotate: `${spinRotation.value}deg` }],
   }));
 
-  // Web pull-to-refresh (touch gesture)
-  const scrollOffsetY = useRef(0);
+  // Web pull-to-refresh state
+  const flatListRef = useRef<FlatList>(null);
   const pullStartY = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
   const [pullDistance, setPullDistance] = useState(0);
   const PULL_THRESHOLD = 60;
+
   const loadInFlightRef = useRef(false);
   const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
   const [rpcFixChainId, setRpcFixChainId] = useState<number | null>(null);
@@ -245,6 +247,54 @@ export default function HomeScreen() {
     setRefreshing(true);
     loadTokens(false, true);
   }, [loadTokens]);
+
+  // Web pull-to-refresh: attach native DOM touch listeners
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !flatListRef.current) return;
+    const node = (flatListRef.current as any)?.getScrollableNode?.()
+      ?? (flatListRef.current as any)?._listRef?._scrollRef
+      ?? (flatListRef.current as any);
+    const el: HTMLElement | null = node instanceof HTMLElement ? node : null;
+    if (!el) return;
+
+    const getScrollTop = () => {
+      let target: HTMLElement | null = el;
+      while (target) {
+        if (target.scrollHeight > target.clientHeight) return target.scrollTop;
+        target = target.parentElement;
+      }
+      return 0;
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (getScrollTop() <= 0) {
+        pullStartY.current = e.touches[0].clientY;
+      }
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (pullStartY.current === null) return;
+      const dist = Math.max(0, (e.touches[0].clientY - pullStartY.current) * 0.5);
+      pullDistanceRef.current = dist;
+      setPullDistance(dist);
+    };
+    const handleTouchEnd = () => {
+      if (pullDistanceRef.current >= PULL_THRESHOLD) {
+        onRefresh();
+      }
+      pullStartY.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: true });
+    el.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [onRefresh]);
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
@@ -488,6 +538,7 @@ export default function HomeScreen() {
   return (
     <ScreenContainer>
       <FlatList
+        ref={flatListRef}
         data={filteredTokens}
         keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
         ListHeaderComponent={renderHeader()}
@@ -512,25 +563,6 @@ export default function HomeScreen() {
             />
           ) : undefined
         }
-        onScroll={Platform.OS === 'web' ? (e: any) => { scrollOffsetY.current = e.nativeEvent.contentOffset.y; } : undefined}
-        scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
-        onTouchStart={Platform.OS === 'web' ? (e: any) => {
-          if (scrollOffsetY.current <= 0 && !refreshing) {
-            pullStartY.current = e.nativeEvent.pageY;
-          }
-        } : undefined}
-        onTouchMove={Platform.OS === 'web' ? (e: any) => {
-          if (pullStartY.current === null) return;
-          const dy = e.nativeEvent.pageY - pullStartY.current;
-          setPullDistance(Math.max(0, dy * 0.5));
-        } : undefined}
-        onTouchEnd={Platform.OS === 'web' ? () => {
-          if (pullDistance >= PULL_THRESHOLD && !refreshing) {
-            onRefresh();
-          }
-          pullStartY.current = null;
-          setPullDistance(0);
-        } : undefined}
         initialNumToRender={10}
         windowSize={5}
         maxToRenderPerBatch={8}
