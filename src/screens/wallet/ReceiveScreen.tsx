@@ -489,7 +489,7 @@ export default function ReceiveScreen() {
               <View style={styles.warningOverlay}>
                 <View style={styles.warningContent}>
                   <View style={styles.warningIconWrap}>
-                    <ShieldAlert size={28} color={color.warning.base} strokeWidth={2} />
+                    <ShieldAlert size={28} color={color.accent.base} strokeWidth={2} />
                   </View>
                   <Text style={styles.warningTitle}>Before you receive</Text>
                   <Text style={styles.warningText}>
@@ -618,7 +618,7 @@ const styles = createStyles(() => ({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: color.bg.base + 'F0',
+    backgroundColor: color.bg.raised,
     borderRadius: radius['2xl'],
     zIndex: 10,
     alignItems: 'center',
@@ -633,7 +633,7 @@ const styles = createStyles(() => ({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: color.warning.soft,
+    backgroundColor: color.accent.soft,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.sm,
@@ -663,7 +663,7 @@ const styles = createStyles(() => ({
     color: color.fg.base,
   },
   warningBtn: {
-    backgroundColor: color.warning.base,
+    backgroundColor: color.accent.base,
     borderRadius: radius.lg,
     paddingVertical: space.lg,
     paddingHorizontal: space['4xl'],
@@ -674,7 +674,7 @@ const styles = createStyles(() => ({
   warningBtnText: {
     fontSize: text.base,
     ...inter.semibold,
-    color: '#FFFFFF',
+    color: color.fg.inverse,
   },
 
   // QR Card
