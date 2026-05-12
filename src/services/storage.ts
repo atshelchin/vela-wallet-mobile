@@ -16,6 +16,7 @@ import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 
 const KEYS = {
   accounts: 'vela.accounts',
+  activeAccountIndex: 'vela.activeAccountIndex',
   pendingUploads: 'vela.pendingUploads',
   customTokens: 'vela.customTokens',
   networkConfig: 'vela.networkConfig',
@@ -118,6 +119,22 @@ export async function loadAccounts(): Promise<StoredAccount[]> {
 export async function findAccountByCredentialId(id: string): Promise<StoredAccount | undefined> {
   const accounts = await loadAccounts();
   return accounts.find(a => a.id === id);
+}
+
+// ---------------------------------------------------------------------------
+// Active Account Index (local-only, UI preference)
+// ---------------------------------------------------------------------------
+
+export async function saveActiveAccountIndex(index: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.activeAccountIndex, String(index));
+}
+
+export async function loadActiveAccountIndex(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.activeAccountIndex);
+    if (raw != null) return parseInt(raw, 10) || 0;
+  } catch {}
+  return 0;
 }
 
 // ---------------------------------------------------------------------------

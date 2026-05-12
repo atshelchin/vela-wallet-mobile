@@ -16,7 +16,7 @@ import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/servic
 import { ChainLogo } from '@/components/ChainLogo';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi, RefreshCw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -344,6 +344,15 @@ export default function HomeScreen() {
       <View style={styles.tokenListHeader}>
         <Text style={styles.tokenListTitle}>Assets</Text>
         <View style={styles.tokenListActions}>
+          {Platform.OS === 'web' && (
+            <Pressable
+              style={styles.searchToggleBtn}
+              onPress={onRefresh}
+              hitSlop={8}
+            >
+              <RefreshCw size={14} color={refreshing ? color.accent.base : color.fg.muted} strokeWidth={2.5} />
+            </Pressable>
+          )}
           <Pressable
             style={styles.searchToggleBtn}
             onPress={() => { setShowSearch(!showSearch); if (showSearch) setTokenSearch(''); }}

@@ -4,7 +4,7 @@
  */
 import React, { createContext, useContext, useReducer, useEffect, useState, type Dispatch } from 'react';
 import type { Account } from './types';
-import { loadAccounts, saveAccount } from '@/services/storage';
+import { loadAccounts, saveAccount, loadActiveAccountIndex, saveActiveAccountIndex } from '@/services/storage';
 import { computeAddress } from '@/services/safe-address';
 
 // MARK: - State Shape
@@ -110,8 +110,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   // Restore wallet state from storage on mount, fixing any bad addresses
   useEffect(() => {
-    loadAccounts()
-      .then(async (accounts) => {
+    Promise.all([loadAccounts(), loadActiveAccountIndex()])
+      .then(async ([accounts, savedIndex]) => {
         if (accounts.length > 0) {
           // Migrate: fix accounts that have credentialId as address
           for (const acct of accounts) {
@@ -122,7 +122,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
               await saveAccount(acct);
             }
           }
-          dispatch({ type: 'SET_WALLET', accounts });
+          // Clamp saved index to valid range
+          const activeIndex = savedIndex < accounts.length ? savedIndex : 0;
+          dispatch({ type: 'SET_WALLET', accounts, activeIndex });
         } else {
           dispatch({ type: 'LOADED_EMPTY' });
         }
@@ -131,6 +133,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'LOADED_EMPTY' });
       });
   }, []);
+
+  // Persist active account index whenever it changes
+  useEffect(() => {
+    if (!state.isLoading && state.hasWallet) {
+      saveActiveAccountIndex(state.activeAccountIndex);
+    }
+  }, [state.activeAccountIndex, state.isLoading, state.hasWallet]);
 
   const value = React.useMemo(
     () => ({ state, dispatch, activeAccount }),
