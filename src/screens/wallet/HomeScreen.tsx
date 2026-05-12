@@ -42,8 +42,8 @@ function AnimatedBalance({ value }: { value: number }) {
 
   useEffect(() => {
     displayed.value = withTiming(value, {
-      duration: 350,
-      easing: Easing.out(Easing.cubic),
+      duration: 800,
+      easing: Easing.out(Easing.quad),
     });
   }, [value, displayed]);
 
