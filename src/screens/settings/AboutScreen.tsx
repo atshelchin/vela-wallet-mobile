@@ -5,7 +5,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { ArrowLeft, ExternalLink, Github, Star } from 'lucide-react-native';
+import { ArrowLeft, ExternalLink, Code, Star } from 'lucide-react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 
