@@ -342,7 +342,7 @@ export default function ReceiveScreen() {
             const time = new Date().toLocaleTimeString('en-US', { hour12: false });
             setDepositDetected(true);
             setDeposits(prev => [{ time, items: changes }, ...prev]);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }
         }
         previousTokens.current = tokens; // always update baseline
