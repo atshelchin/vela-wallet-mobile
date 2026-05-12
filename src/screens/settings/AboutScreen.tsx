@@ -50,7 +50,7 @@ export default function AboutScreen() {
           >
             <View style={styles.githubLeft}>
               <View style={styles.githubIconWrap}>
-                <Github size={20} color={color.fg.base} strokeWidth={2} />
+                <Code size={20} color={color.fg.base} strokeWidth={2} />
               </View>
               <View style={styles.githubText}>
                 <Text style={styles.githubTitle}>Open Source</Text>
