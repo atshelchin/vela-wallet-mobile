@@ -1,4 +1,4 @@
-import { showAlert } from '@/services/platform';
+import { showAlert, hapticSuccess } from '@/services/platform';
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, FlatList } from 'react-native';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -252,9 +252,8 @@ export default function AddTokenScreen() {
       };
       await saveCustomNetwork(network);
       await refreshCustomNetworks();
-      showAlert('Network Added', `${netChainInfo.name} has been added.`, [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      hapticSuccess();
+      router.back();
     } catch {
       showAlert('Error', 'Failed to add network.');
     }
@@ -301,9 +300,8 @@ export default function AddTokenScreen() {
       };
 
       await saveCustomToken(token);
-      showAlert('Token Added', `${tokenMeta.symbol} has been added to your wallet.`, [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      hapticSuccess();
+      router.back();
     } catch {
       showAlert('Error', 'Failed to save token.');
     } finally {
