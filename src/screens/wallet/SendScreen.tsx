@@ -117,7 +117,14 @@ export default function SendScreen() {
   useEffect(() => {
     if (!address) return;
     setLoading(true);
-    fetchTokens(address)
+    fetchTokens(address, {
+      onProgress: (partial) => {
+        const nonZero = partial.filter((t) => tokenBalanceDouble(t) > 0);
+        nonZero.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+        setTokens(nonZero);
+        setLoading(false); // Show tokens as soon as first chain responds
+      },
+    })
       .then((result) => {
         const nonZero = result.filter((t) => tokenBalanceDouble(t) > 0);
         nonZero.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
@@ -154,6 +161,17 @@ export default function SendScreen() {
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
     setStep('enter-details');
+
+    // Start prefetching RPC data + bundler info as soon as token is selected.
+    // User will spend several seconds filling in recipient + amount — plenty of
+    // time for these to complete and warm the caches.
+    if (activeAccount) {
+      const chainId = tokenChainId(token);
+      prefetchForSend(activeAccount.address, chainId);
+      fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
+      findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
+      import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
+    }
   };
 
   const handleContinue = async () => {
@@ -171,46 +189,46 @@ export default function SendScreen() {
       return;
     }
 
-    // Estimate gas fee + check bundler funding in parallel before entering confirm screen
+    // Jump to confirm screen immediately — load gas estimate in background
     if (selectedToken && activeAccount) {
-      setEstimatingGas(true);
       const chainId = tokenChainId(selectedToken);
-      try {
-        // Run gas estimation and bundler pre-fetch concurrently
-        // bundler info is fetched to warm cache — checkBundlerFunding reuses it
-        const [feeResult] = await Promise.allSettled([
-          estimateTransactionFee(activeAccount.address, chainId),
-          fetchBundlerAccountInfo(chainId, activeAccount.address),
-        ]);
 
-        const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
-        if (fee) {
-          setEstimatedGas(formatWeiToEth(fee.totalWei));
-        } else {
-          setEstimatedGas(null);
-        }
-
-        // Check bundler funding using pre-fetched info (avoids second REST call)
-        const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
-        if (funding) {
-          setEstimatingGas(false);
-          setFundingNeeded(funding);
-          return;
-        }
-      } catch { /* proceed */ }
-
-      setEstimatingGas(false);
-    }
-
-    // Prefetch everything while user reviews confirm screen
-    if (activeAccount && selectedToken) {
-      const chainId = tokenChainId(selectedToken);
+      // Ensure prefetch is running (may already be cached from token selection)
       prefetchForSend(activeAccount.address, chainId);
-      findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
-      import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
-    }
+      if (!prefetchedAccount.current) {
+        findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
+      }
+      if (!webauthnModuleRef.current) {
+        import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
+      }
 
-    setStep('confirm');
+      // Show confirm screen right away
+      setEstimatingGas(true);
+      setEstimatedGas(null);
+      setStep('confirm');
+
+      // Load gas + check bundler funding in background
+      (async () => {
+        try {
+          const [feeResult] = await Promise.allSettled([
+            estimateTransactionFee(activeAccount.address, chainId),
+            fetchBundlerAccountInfo(chainId, activeAccount.address),
+          ]);
+
+          const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
+          setEstimatedGas(fee ? formatWeiToEth(fee.totalWei) : null);
+
+          const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
+          if (funding) {
+            setFundingNeeded(funding);
+            setStep('enter-details'); // Go back — can't proceed without funding
+          }
+        } catch { /* proceed */ }
+        setEstimatingGas(false);
+      })();
+    } else {
+      setStep('confirm');
+    }
   };
 
   const handleMaxAmount = () => {
