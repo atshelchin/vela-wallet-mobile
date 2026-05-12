@@ -1,29 +1,28 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Share, AppState, Platform, Image } from 'react-native';
+import { ChainLogo } from '@/components/ChainLogo';
+import { QRCode } from '@/components/QRCode';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { VelaCard } from '@/components/ui/VelaCard';
+import { fadeIn, fadeInDown } from '@/constants/entering';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
+import type { Network } from '@/models/network';
+import { chainName, getAllNetworksSync } from '@/models/network';
+import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
+import { useWallet } from '@/models/wallet-state';
+import { fetchTokens } from '@/services/wallet-api';
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import { ArrowLeft, Check, Copy, Share2 } from 'lucide-react-native';
+import QRCodeLib from 'qrcode';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { fadeIn, fadeInDown } from '@/constants/entering';
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { VelaCard } from '@/components/ui/VelaCard';
-import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
-import { useWallet } from '@/models/wallet-state';
-import { getAllNetworksSync } from '@/models/network';
-import { QRCode } from '@/components/QRCode';
-import { fetchTokens } from '@/services/wallet-api';
-import { tokenBalanceDouble, tokenUsdValue, tokenId, tokenChainId, formatBalance, type APIToken } from '@/models/types';
-import { chainName } from '@/models/network';
-import * as Haptics from 'expo-haptics';
-import { Copy, Check, ArrowLeft, Share2 } from 'lucide-react-native';
-import type { Network } from '@/models/network';
-import QRCodeLib from 'qrcode';
 
 // ── Share card helpers ──
 const LOGO_ASSET = require('@/../assets/images/icon.png');
