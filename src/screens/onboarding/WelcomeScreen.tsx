@@ -153,8 +153,8 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           {/* Passkey Index — the only endpoint needed for onboarding */}
           <Text style={settingsStyles.sectionLabel}>PASSKEY INDEX</Text>
           <Text style={settingsStyles.hint}>
-            This service stores your public key for cross-device wallet recovery.
-            It is the only service required for wallet creation and sign-in.
+            This service stores your passkey's public key for cross-device sign-in.
+            Your private key never leaves your device — only the public key is uploaded.
           </Text>
           <View style={settingsStyles.field}>
             <View style={settingsStyles.fieldHeader}>

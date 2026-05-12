@@ -75,7 +75,7 @@ export default function AboutScreen() {
             <View style={styles.separator} />
             <InfoRow number="3" title="Works across networks" body="One address on Ethereum, Arbitrum, Base, Optimism, Polygon, BNB Chain, and Avalanche." />
             <View style={styles.separator} />
-            <InfoRow number="4" title="Cloud-synced recovery" body="Your identity syncs across your devices via iCloud or Google, so you can recover on a new phone." />
+            <InfoRow number="4" title="Cross-device sign-in" body="Your passkey public key is synced via iCloud or Google. Your private key never leaves your device." />
           </VelaCard>
         </Animated.View>
 

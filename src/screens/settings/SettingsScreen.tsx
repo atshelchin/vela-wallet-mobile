@@ -441,7 +441,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
 
   const fields: { key: keyof ServiceEndpoints; label: string; hint: string; healthType: 'data' | 'passkey' | 'bundler' }[] = [
     { key: 'ethereumDataURL', label: 'CHAIN DATA INDEX', hint: 'Provides network info, token data, and chain logos', healthType: 'data' },
-    { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores public keys for cross-device recovery', healthType: 'passkey' },
+    { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores passkey public keys for cross-device sign-in', healthType: 'passkey' },
     { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Vela Bundler compatible endpoint required', healthType: 'bundler' },
   ];
 

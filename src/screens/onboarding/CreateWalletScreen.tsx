@@ -51,7 +51,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     name: string;
   }): Promise<boolean> {
     try {
-      setStatus('Setting up recovery...');
+      setStatus('Syncing public key...');
       await uploadPublicKey(params);
       return true;
     } catch (err) {
@@ -196,7 +196,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
           </Pressable>
         )}
         <Text style={styles.title}>
-          {created ? 'Wallet Created' : uploadFailed ? 'Recovery Setup' : 'Create Wallet'}
+          {created ? 'Wallet Created' : uploadFailed ? 'Cross-Device Sync' : 'Create Wallet'}
         </Text>
         {onBack && !uploadFailed && <View style={styles.headerSpacer} />}
       </View>
@@ -242,10 +242,11 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <View style={styles.stateIconWrapError}>
               <AlertTriangle size={32} color={color.accent.base} strokeWidth={2} />
             </View>
-            <Text style={styles.errorTitle}>Recovery setup failed</Text>
+            <Text style={styles.errorTitle}>Sync failed</Text>
             <Text style={styles.errorMessage}>
-              Your wallet was created successfully, but the recovery key could not be saved to the
-              server. Without this, you won't be able to recover your wallet on another device.
+              Your wallet was created successfully, but your passkey public key could not be
+              saved to the index server. Without this, you won't be able to sign in on another
+              device. Your private key never leaves your device — only the public key is uploaded.
             </Text>
             {uploadError ? (
               <VelaCard style={styles.errorDetail}>
@@ -253,7 +254,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               </VelaCard>
             ) : null}
             <Text style={styles.hint}>
-              Check your network connection, or configure a custom Passkey Index endpoint in Settings.
+              Check your network connection, or configure a custom Passkey Index endpoint below.
             </Text>
             {onOpenSettings && (
               <Pressable style={styles.settingsLink} onPress={onOpenSettings}>
