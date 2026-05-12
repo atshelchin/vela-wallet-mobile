@@ -219,17 +219,20 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             <X size={22} color={color.accent.base} strokeWidth={2.5} />
           </Pressable>
           <Text style={styles.title}>Scan QR</Text>
-          {Platform.OS !== 'web' ? (
-            <Pressable
-              onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
-              hitSlop={8}
-              style={styles.headerBtn}
-            >
-              <SwitchCamera size={22} color={color.accent.base} strokeWidth={2} />
+          <View style={styles.headerRight}>
+            <Pressable onPress={handlePickImage} hitSlop={8} style={styles.headerBtn}>
+              <ImagePlus size={20} color={color.accent.base} strokeWidth={2} />
             </Pressable>
-          ) : (
-            <View style={styles.headerBtn} />
-          )}
+            {Platform.OS !== 'web' && (
+              <Pressable
+                onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
+                hitSlop={8}
+                style={styles.headerBtn}
+              >
+                <SwitchCamera size={20} color={color.accent.base} strokeWidth={2} />
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {Platform.OS === 'web' ? (
@@ -239,12 +242,8 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         )}
 
         <View style={styles.footer}>
-          <Pressable style={styles.galleryBtn} onPress={handlePickImage}>
-            <ImagePlus size={18} color={color.accent.base} strokeWidth={2} />
-            <Text style={styles.galleryText}>Pick from Photos</Text>
-          </Pressable>
           <Text style={styles.hint}>
-            Point camera at a QR code, or select an image
+            Point camera at a QR code
           </Text>
         </View>
       </View>
@@ -273,6 +272,10 @@ const styles = createStyles(() => ({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: text.xl,
@@ -367,23 +370,8 @@ const styles = createStyles(() => ({
   },
   footer: {
     alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space['2xl'],
-    paddingBottom: space['5xl'],
-  },
-  galleryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: space['2xl'],
     paddingVertical: space.lg,
-    borderRadius: radius.full,
-  },
-  galleryText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.accent.base,
+    paddingBottom: space['2xl'],
   },
   hint: {
     fontSize: text.sm,

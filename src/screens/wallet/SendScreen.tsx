@@ -546,15 +546,8 @@ export default function SendScreen() {
             </VelaCard>
           )}
 
-          {/* Amount — supports token or USD input with toggle */}
-          <View style={styles.fieldLabelRow}>
-            <Text style={styles.fieldLabel}>Amount</Text>
-            {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 && (
-              <Pressable onPress={() => setInputInUsd(!inputInUsd)} hitSlop={6} style={styles.fieldLabelAction}>
-                <Text style={styles.goText}>{inputInUsd ? selectedToken.symbol : 'USD'}</Text>
-              </Pressable>
-            )}
-          </View>
+          {/* Amount */}
+          <Text style={styles.fieldLabel}>Amount</Text>
           <View style={styles.amountWrap}>
             <View style={styles.amountTopRow}>
               <TextInput
@@ -565,11 +558,34 @@ export default function SendScreen() {
                 onChangeText={setAmount}
                 keyboardType="decimal-pad"
               />
-              <Pressable onPress={handleMaxAmount} hitSlop={6}>
-                <Text style={styles.goText}>
-                  {inputInUsd ? 'USD' : selectedToken.symbol}
-                </Text>
-              </Pressable>
+              {/* Unit label — tap to toggle USD/token if price is available */}
+              {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 ? (
+                <Pressable
+                  onPress={() => {
+                    // Convert current amount to the other unit before switching
+                    const val = parseFloat(amount || '0');
+                    if (val > 0 && selectedToken.priceUsd) {
+                      if (inputInUsd) {
+                        // USD → token
+                        setAmount((val / selectedToken.priceUsd).toFixed(8).replace(/\.?0+$/, ''));
+                      } else {
+                        // token → USD
+                        setAmount((val * selectedToken.priceUsd).toFixed(2));
+                      }
+                    }
+                    setInputInUsd(!inputInUsd);
+                  }}
+                  hitSlop={8}
+                  style={styles.unitToggle}
+                >
+                  <Text style={styles.unitText}>{inputInUsd ? 'USD' : selectedToken.symbol}</Text>
+                  <Text style={styles.unitSwap}>⇄</Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={handleMaxAmount} hitSlop={6}>
+                  <Text style={styles.goText}>{selectedToken.symbol}</Text>
+                </Pressable>
+              )}
             </View>
             {amount ? (
               <Text style={styles.amountUsd}>
@@ -792,8 +808,8 @@ function ConfirmRow({ label, value, sub, highlight }: { label: string; value: st
   return (
     <View style={styles.confirmRow}>
       <Text style={styles.confirmLabel}>{label}</Text>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={[styles.confirmValue, highlight && styles.confirmValueHighlight]} numberOfLines={1}>
+      <View style={styles.confirmValueWrap}>
+        <Text style={[styles.confirmValue, highlight && styles.confirmValueHighlight]}>
           {value}
         </Text>
         {sub ? <Text style={styles.confirmSub}>{sub}</Text> : null}
@@ -1024,6 +1040,24 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     padding: 0,
   },
+  unitToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    backgroundColor: color.accent.soft,
+    borderRadius: radius.md,
+  },
+  unitText: {
+    fontSize: text.sm,
+    ...inter.bold,
+    color: color.accent.base,
+  },
+  unitSwap: {
+    fontSize: text.sm,
+    color: color.accent.base,
+  },
   amountUsd: {
     fontSize: text.xs,
     ...inter.medium,
@@ -1053,13 +1087,18 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.regular,
     color: color.fg.muted,
+    flexShrink: 0,
+    marginRight: space.lg,
+  },
+  confirmValueWrap: {
+    alignItems: 'flex-end' as const,
+    flexShrink: 1,
   },
   confirmValue: {
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
-    maxWidth: '60%',
-    textAlign: 'right',
+    textAlign: 'right' as const,
   },
   gasTitle: {
     fontSize: text.sm,
