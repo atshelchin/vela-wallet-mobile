@@ -19,7 +19,7 @@ import { useColorSchemePreference, type ColorSchemePreference } from '@/constant
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
-import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork } from '@/services/storage';
+import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { refreshPool } from '@/services/rpc-pool';
 import { clearBundlerCache } from '@/services/bundler-service';
@@ -937,17 +937,25 @@ export default function SettingsScreen() {
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSignOut, setShowSignOut] = useState(false);
+  const [pendingSync, setPendingSync] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
 
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
 
-  const handleLogout = () => {
-    showAlert('Logout', 'Are you sure you want to logout? This will clear all local data.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => { await clearAll(); dispatch({ type: 'LOGOUT' }); router.replace('/'); } },
-    ]);
+  const handleOpenSignOut = async () => {
+    const pending = await hasPendingUploads();
+    setPendingSync(pending);
+    setShowSignOut(true);
+  };
+
+  const handleSignOut = () => {
+    setSigningOut(true);
+    dispatch({ type: 'LOGOUT' });
+    router.replace('/');
   };
 
   return (
@@ -1005,11 +1013,11 @@ export default function SettingsScreen() {
           )}
         </Animated.View>
 
-        {/* Logout */}
+        {/* Sign Out */}
         <Animated.View entering={fadeInDown(200, 300)}>
-          <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Pressable style={styles.logoutButton} onPress={handleOpenSignOut}>
             <LogOutIcon size={16} color={color.accent.base} />
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
         </Animated.View>
       </ScrollView>
@@ -1018,6 +1026,39 @@ export default function SettingsScreen() {
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
+
+      {/* Sign Out Confirmation */}
+      <AppModal visible={showSignOut} onClose={() => setShowSignOut(false)}>
+        <View style={styles.signOutModal}>
+          <View style={styles.signOutIconWrap}>
+            <LogOutIcon size={24} color={color.accent.base} strokeWidth={2} />
+          </View>
+          <Text style={styles.signOutTitle}>Sign Out</Text>
+          <Text style={styles.signOutDesc}>
+            Your wallet data stays on this device. Sign back in anytime with your passkey (Face ID / fingerprint).
+          </Text>
+
+          {pendingSync && (
+            <View style={styles.signOutWarning}>
+              <AlertTriangle size={16} color={color.warning.base} strokeWidth={2} />
+              <Text style={styles.signOutWarningText}>
+                Your public key hasn't been synced to the server yet. Signing out now may prevent recovery on other devices.
+              </Text>
+            </View>
+          )}
+
+          <VelaButton
+            title={pendingSync ? 'Sign Out Anyway' : 'Sign Out'}
+            onPress={handleSignOut}
+            variant="accent"
+            loading={signingOut}
+            style={styles.signOutBtn}
+          />
+          <Pressable style={styles.signOutCancel} onPress={() => setShowSignOut(false)}>
+            <Text style={styles.signOutCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </AppModal>
     </ScreenContainer>
   );
 }
@@ -1148,4 +1189,14 @@ const styleFactory = () => ({
   addNetCompatError: { fontSize: text.sm, ...inter.regular, color: color.accent.base, marginTop: space.sm },
   addNetHint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
 
+  // Sign Out Modal
+  signOutModal: { padding: space['3xl'], paddingTop: space['2xl'], alignItems: 'center' as const },
+  signOutIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.accent.soft, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: space.xl },
+  signOutTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base, marginBottom: space.md },
+  signOutDesc: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 22, marginBottom: space.xl },
+  signOutWarning: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: space.md, backgroundColor: color.warning.soft, borderRadius: radius.lg, padding: space.xl, marginBottom: space.xl, width: '100%' as const },
+  signOutWarningText: { flex: 1, fontSize: text.sm, ...inter.medium, color: color.warning.base, lineHeight: 20 },
+  signOutBtn: { width: '100%' as const, marginBottom: space.lg },
+  signOutCancel: { paddingVertical: space.lg },
+  signOutCancelText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
 });
