@@ -130,6 +130,32 @@ Each service exposes a `/api/health` endpoint for status verification. The walle
 2. **Reachable** — server responds within 10 seconds
 3. **Valid response** — `/api/health` returns the correct `service` identifier and `status: "ok"`
 
+## Gas & Fee Model
+
+Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a **bundler** instead of being submitted directly by the user. This means:
+
+### How Gas Fees Work
+
+Each transaction incurs a gas fee that is deducted from **your Safe wallet's native token balance** (ETH, BNB, etc.). The fee consists of:
+
+- **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
+- **Relayer service fee** — A ~30% markup over the on-chain gas price (`maxFeePerGas = gasPrice × 1.3`). This covers the bundler's operating costs.
+
+The total estimated fee is shown on the confirmation screen with a full breakdown: on-chain gas price, UserOp gas price, gas limit, fee in native tokens, and fee in USD.
+
+### Gas Relayer Account
+
+Before your first transaction on a network, you need to fund a **dedicated gas relayer account** (bundler EOA). This is a one-time setup:
+
+- The deposit amount is based on the actual transaction gas requirement.
+- The deposit is **non-refundable** — it serves as the relayer's initial operating balance.
+- The relayer address **may change** due to service upgrades, requiring a new deposit.
+- After the initial deposit, the relayer is self-sustaining: it earns back gas costs from each transaction via EntryPoint refunds.
+
+### Max Send
+
+When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
+
 ## Security Model
 
 - **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager). Vela Wallet never has access to the private key.

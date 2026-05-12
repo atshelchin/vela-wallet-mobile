@@ -75,9 +75,8 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         <View style={styles.header}>
           <Text style={styles.title}>Fund Gas Relayer</Text>
           <Text style={styles.subtitle}>
-            Your transactions are relayed by a dedicated gas account.
-            Deposit {funding.nativeSym} to cover the on-chain gas fee
-            for this transaction.
+            A small deposit is needed to activate your transaction relayer
+            on this network. This is a one-time setup cost.
           </Text>
         </View>
 
@@ -130,10 +129,13 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* Note */}
         <Text style={styles.note}>
-          This {funding.nativeSym} pays the on-chain gas when your transaction
-          is submitted. Unused balance stays in the gas account and is used
-          for future transactions. It is separate from your Safe wallet
-          balance. You can deposit from any wallet or exchange.
+          This deposit funds the relayer that submits your transactions
+          on-chain. It is non-refundable. The relayer address may change
+          due to service upgrades, which would require a new deposit.
+          Each transaction also costs a small gas fee (shown before you
+          confirm), deducted from your Safe wallet, which includes
+          a ~30% relayer service fee. You can deposit from any wallet
+          or exchange.
         </Text>
 
         {/* Actions */}
