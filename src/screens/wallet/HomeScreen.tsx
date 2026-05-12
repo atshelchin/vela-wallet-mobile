@@ -25,7 +25,9 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  withRepeat,
   Easing,
+  cancelAnimation,
 } from 'react-native-reanimated';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
@@ -153,6 +155,30 @@ export default function HomeScreen() {
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Spinning refresh icon for web
+  const spinRotation = useSharedValue(0);
+  useEffect(() => {
+    if (refreshing) {
+      spinRotation.value = 0;
+      spinRotation.value = withRepeat(
+        withTiming(360, { duration: 800, easing: Easing.linear }),
+        -1,
+      );
+    } else {
+      cancelAnimation(spinRotation);
+      spinRotation.value = withTiming(0, { duration: 200 });
+    }
+  }, [refreshing, spinRotation]);
+  const spinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spinRotation.value}deg` }],
+  }));
+
+  // Web pull-to-refresh (touch gesture)
+  const scrollOffsetY = useRef(0);
+  const pullStartY = useRef<number | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const PULL_THRESHOLD = 60;
   const loadInFlightRef = useRef(false);
   const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
   const [rpcFixChainId, setRpcFixChainId] = useState<number | null>(null);
@@ -298,6 +324,18 @@ export default function HomeScreen() {
 
   const renderHeader = () => (
     <View style={styles.header}>
+      {/* Web pull-to-refresh indicator */}
+      {Platform.OS === 'web' && pullDistance > 0 && (
+        <View style={styles.webPullIndicator}>
+          <Animated.View style={pullDistance >= PULL_THRESHOLD ? spinStyle : undefined}>
+            <RefreshCw
+              size={18}
+              color={pullDistance >= PULL_THRESHOLD ? color.accent.base : color.fg.subtle}
+              strokeWidth={2.5}
+            />
+          </Animated.View>
+        </View>
+      )}
       {/* Account chip */}
       <Animated.View entering={fadeIn(0, 400)}>
         <View style={styles.accountChipWrap}>
@@ -350,7 +388,9 @@ export default function HomeScreen() {
               onPress={onRefresh}
               hitSlop={8}
             >
-              <RefreshCw size={14} color={refreshing ? color.accent.base : color.fg.muted} strokeWidth={2.5} />
+              <Animated.View style={spinStyle}>
+                <RefreshCw size={14} color={refreshing ? color.accent.base : color.fg.muted} strokeWidth={2.5} />
+              </Animated.View>
             </Pressable>
           )}
           <Pressable
@@ -464,12 +504,33 @@ export default function HomeScreen() {
           />
         )}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={color.accent.base}
-          />
+          Platform.OS !== 'web' ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={color.accent.base}
+            />
+          ) : undefined
         }
+        onScroll={Platform.OS === 'web' ? (e: any) => { scrollOffsetY.current = e.nativeEvent.contentOffset.y; } : undefined}
+        scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
+        onTouchStart={Platform.OS === 'web' ? (e: any) => {
+          if (scrollOffsetY.current <= 0 && !refreshing) {
+            pullStartY.current = e.nativeEvent.pageY;
+          }
+        } : undefined}
+        onTouchMove={Platform.OS === 'web' ? (e: any) => {
+          if (pullStartY.current === null) return;
+          const dy = e.nativeEvent.pageY - pullStartY.current;
+          setPullDistance(Math.max(0, dy * 0.5));
+        } : undefined}
+        onTouchEnd={Platform.OS === 'web' ? () => {
+          if (pullDistance >= PULL_THRESHOLD && !refreshing) {
+            onRefresh();
+          }
+          pullStartY.current = null;
+          setPullDistance(0);
+        } : undefined}
         initialNumToRender={10}
         windowSize={5}
         maxToRenderPerBatch={8}
@@ -598,6 +659,11 @@ export default function HomeScreen() {
 const styles = createStyles(() => ({
   listContent: {
     paddingBottom: 100,
+  },
+  webPullIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.lg,
   },
   header: {
     paddingTop: space.xl,
