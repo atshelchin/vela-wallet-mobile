@@ -15,7 +15,8 @@ import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
 import { rpcCall } from '@/services/rpc-adapter';
 import { MULTICALL3, encAggregate3, decAggregate3 } from '@/services/abi';
-import { Check, ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
+import { Check, ArrowLeft, ChevronDown, Search, X, ScanLine } from 'lucide-react-native';
+import { QRScanner } from '@/components/QRScanner';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -165,6 +166,7 @@ export default function AddTokenScreen() {
   const [loading, setLoading] = useState(false);
   const [tokenMeta, setTokenMeta] = useState<{ name: string; symbol: string; decimals: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId) ?? getAllNetworksSync()[0];
 
@@ -239,18 +241,23 @@ export default function AddTokenScreen() {
 
         {/* Contract address input */}
         <Text style={styles.fieldLabel}>Contract Address</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="0x..."
-          placeholderTextColor={color.fg.subtle}
-          value={contractAddress}
-          onChangeText={(t) => {
-            setContractAddress(t);
-            setTokenMeta(null);
-          }}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.inputWithIcon}
+            placeholder="0x..."
+            placeholderTextColor={color.fg.subtle}
+            value={contractAddress}
+            onChangeText={(t) => {
+              setContractAddress(t);
+              setTokenMeta(null);
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable onPress={() => setShowScanner(true)} hitSlop={6} style={styles.scanBtn}>
+            <ScanLine size={20} color={color.fg.subtle} strokeWidth={2} />
+          </Pressable>
+        </View>
 
         {/* Fetch button */}
         <VelaButton
@@ -301,6 +308,22 @@ export default function AddTokenScreen() {
           </Animated.View>
         )}
       </ScrollView>
+
+      {showScanner && (
+        <QRScanner
+          visible={showScanner}
+          onScan={(data) => {
+            setShowScanner(false);
+            // Extract 0x address from QR data (may include ethereum: prefix or extra params)
+            const match = data.match(/0x[0-9a-fA-F]{40}/);
+            if (match) {
+              setContractAddress(match[0]);
+              setTokenMeta(null);
+            }
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -421,6 +444,27 @@ const styles = createStyles(() => ({
   },
 
   // Input
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+  },
+  inputWithIcon: {
+    flex: 1,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
+    fontSize: text.base,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.base,
+  },
+  scanBtn: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+  },
   input: {
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
