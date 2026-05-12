@@ -34,8 +34,9 @@ import { derSignatureToRaw } from './attestation-parser';
 // ---------------------------------------------------------------------------
 
 const VERIFICATION_GAS_DEPLOYED = 300_000n;
-const VERIFICATION_GAS_UNDEPLOYED = 600_000n;
-const CALL_GAS_LIMIT = 500_000n;  // 500k — swap/complex calls need more
+// Undeployed: sendUserOp uses bigintMax(estimated, 2_000_000n), so estimate must match.
+const VERIFICATION_GAS_UNDEPLOYED = 2_000_000n;
+const CALL_GAS_LIMIT = 200_000n;  // 200k — simple transfers; bundler estimation may increase
 const PRE_VERIFICATION_GAS = 100_000n; // 100k — must exceed bundler's calculated preVerificationGas
 
 // ---------------------------------------------------------------------------

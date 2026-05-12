@@ -56,6 +56,14 @@ function amountToWeiHex(amount: string, decimals: number): string {
   return n.toString(16);
 }
 
+/** Resolve the token amount from user input, handling USD mode. */
+function resolveTokenAmount(amount: string, inUsd: boolean, priceUsd: number | null | undefined): string {
+  if (!inUsd || !priceUsd || priceUsd <= 0) return amount;
+  const usd = parseFloat(amount || '0');
+  if (usd <= 0) return '0';
+  return (usd / priceUsd).toFixed(18).replace(/\.?0+$/, '');
+}
+
 function shortAddr(addr: string): string {
   if (addr.length <= 14) return addr;
   return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
@@ -107,6 +115,8 @@ export default function SendScreen() {
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
+  const [inputInUsd, setInputInUsd] = useState(false);
+  const [gasExpanded, setGasExpanded] = useState(false);
   const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
   const [showContacts, setShowContacts] = useState(false);
 
@@ -318,7 +328,8 @@ export default function SendScreen() {
       };
 
       setTxStatus('submitting');
-      const weiHex = amountToWeiHex(amount, selectedToken.decimals);
+      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd);
+      const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
 
       let result;
       if (isNativeToken(selectedToken)) {
@@ -535,8 +546,15 @@ export default function SendScreen() {
             </VelaCard>
           )}
 
-          {/* Amount — full width, USD inside */}
-          <Text style={styles.fieldLabel}>Amount</Text>
+          {/* Amount — supports token or USD input with toggle */}
+          <View style={styles.fieldLabelRow}>
+            <Text style={styles.fieldLabel}>Amount</Text>
+            {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 && (
+              <Pressable onPress={() => setInputInUsd(!inputInUsd)} hitSlop={6} style={styles.fieldLabelAction}>
+                <Text style={styles.goText}>{inputInUsd ? selectedToken.symbol : 'USD'}</Text>
+              </Pressable>
+            )}
+          </View>
           <View style={styles.amountWrap}>
             <View style={styles.amountTopRow}>
               <TextInput
@@ -548,12 +566,18 @@ export default function SendScreen() {
                 keyboardType="decimal-pad"
               />
               <Pressable onPress={handleMaxAmount} hitSlop={6}>
-                <Text style={styles.goText}>{selectedToken.symbol}</Text>
+                <Text style={styles.goText}>
+                  {inputInUsd ? 'USD' : selectedToken.symbol}
+                </Text>
               </Pressable>
             </View>
-            {amount && selectedToken.priceUsd ? (
+            {amount ? (
               <Text style={styles.amountUsd}>
-                ≈ {formatUsd(parseFloat(amount || '0') * (selectedToken.priceUsd ?? 0))}
+                {inputInUsd
+                  ? `≈ ${(parseFloat(amount || '0') / (selectedToken.priceUsd || 1)).toFixed(6)} ${selectedToken.symbol}`
+                  : selectedToken.priceUsd
+                    ? `≈ ${formatUsd(parseFloat(amount || '0') * (selectedToken.priceUsd ?? 0))}`
+                    : null}
               </Text>
             ) : null}
           </View>
@@ -587,8 +611,17 @@ export default function SendScreen() {
   // Step 3: Confirm
   const renderConfirm = () => {
     if (!selectedToken) return null;
-    const amountNum = parseFloat(amount || '0');
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd);
+    const amountNum = parseFloat(tokenAmount || '0');
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
+
+    // Fee calculations
+    const sym = nativeSymbol(tokenChainId(selectedToken));
+    const nativePrice = isNativeToken(selectedToken)
+      ? (selectedToken.priceUsd ?? 0)
+      : (tokens.find(t => isNativeToken(t) && tokenChainId(t) === tokenChainId(selectedToken))?.priceUsd ?? 0);
+    const feeNative = feeEstimate ? Number(feeEstimate.totalWei) / 1e18 : 0;
+    const feeUsd = feeNative * nativePrice;
 
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
@@ -603,64 +636,42 @@ export default function SendScreen() {
             <ConfirmRow
               label="Amount"
               value={`${formatBalance(amountNum)} ${selectedToken.symbol}`}
+              sub={usdAmount > 0 ? `≈ ${formatUsd(usdAmount)}` : undefined}
               highlight
             />
-            {usdAmount > 0 && (
-              <>
-                <View style={styles.confirmSeparator} />
-                <ConfirmRow label="Value" value={formatUsd(usdAmount)} />
-              </>
-            )}
             <View style={styles.confirmSeparator} />
             <ConfirmRow label="Network" value={chainName(tokenChainId(selectedToken))} />
+            <View style={styles.confirmSeparator} />
+            <ConfirmRow
+              label="Est. Fee"
+              value={estimatingGas ? 'Estimating...' : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : 'Unable to estimate'}
+              sub={!estimatingGas && feeUsd > 0.001 ? `≈ ${formatUsd(feeUsd)}` : undefined}
+            />
           </VelaCard>
 
-          {/* Gas Fee Breakdown */}
-          <VelaCard elevated style={styles.confirmCard}>
-            <Text style={styles.gasTitle}>Gas Details</Text>
-            {estimatingGas ? (
-              <Text style={styles.gasEstimating}>Estimating gas...</Text>
-            ) : feeEstimate ? (() => {
-              const sym = nativeSymbol(tokenChainId(selectedToken));
-              const chainGasGwei = Number(feeEstimate.onChainGasPrice) / 1e9;
-              const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
-              const feeNative = Number(feeEstimate.totalWei) / 1e18;
-              // Estimate native token price from selectedToken if it's native, otherwise from tokens list
-              const nativePrice = isNativeToken(selectedToken)
-                ? (selectedToken.priceUsd ?? 0)
-                : (tokens.find(t => isNativeToken(t) && tokenChainId(t) === tokenChainId(selectedToken))?.priceUsd ?? 0);
-              const feeUsd = feeNative * nativePrice;
-              const totalUsd = usdAmount + feeUsd;
-              return (
-                <>
-                  <ConfirmRow label="Gas Price (chain)" value={`${chainGasGwei.toFixed(4)} Gwei`} />
-                  <View style={styles.confirmSeparator} />
-                  <ConfirmRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
-                  <View style={styles.confirmSeparator} />
-                  <ConfirmRow label="Gas Limit" value={feeEstimate.totalGas.toLocaleString()} />
-                  <View style={styles.confirmSeparator} />
-                  <ConfirmRow
-                    label="Est. Fee"
-                    value={`~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`}
-                  />
-                  {feeUsd > 0.001 && (
-                    <>
-                      <View style={styles.confirmSeparator} />
-                      <ConfirmRow label="Fee (USD)" value={`~${formatUsd(feeUsd)}`} />
-                    </>
-                  )}
-                  <View style={styles.confirmSeparator} />
-                  <ConfirmRow
-                    label="Total Cost"
-                    value={totalUsd > 0.001 ? formatUsd(totalUsd) : '-'}
-                    highlight
-                  />
-                </>
-              );
-            })() : (
-              <Text style={styles.gasEstimating}>Unable to estimate</Text>
-            )}
-          </VelaCard>
+          {/* Gas Details — collapsed by default */}
+          {feeEstimate && !estimatingGas && (
+            <Pressable onPress={() => setGasExpanded(!gasExpanded)}>
+              <Text style={styles.gasToggle}>
+                {gasExpanded ? 'Hide' : 'Show'} gas details
+              </Text>
+            </Pressable>
+          )}
+          {gasExpanded && feeEstimate && (() => {
+            const chainGasGwei = Number(feeEstimate.onChainGasPrice) / 1e9;
+            const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
+            return (
+              <VelaCard style={styles.gasCard}>
+                <ConfirmRow label="Gas Price (chain)" value={`${chainGasGwei.toFixed(4)} Gwei`} />
+                <View style={styles.confirmSeparator} />
+                <ConfirmRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
+                <View style={styles.confirmSeparator} />
+                <ConfirmRow label="Gas Limit" value={feeEstimate.totalGas.toLocaleString()} />
+                <View style={styles.confirmSeparator} />
+                <ConfirmRow label="Wallet Deployed" value={feeEstimate.deployed ? 'Yes' : 'No (first tx)'} />
+              </VelaCard>
+            );
+          })()}
 
           {txStatus === 'idle' && (
             <VelaButton
@@ -777,13 +788,16 @@ export default function SendScreen() {
   );
 }
 
-function ConfirmRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function ConfirmRow({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
   return (
     <View style={styles.confirmRow}>
       <Text style={styles.confirmLabel}>{label}</Text>
-      <Text style={[styles.confirmValue, highlight && styles.confirmValueHighlight]} numberOfLines={1}>
-        {value}
-      </Text>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={[styles.confirmValue, highlight && styles.confirmValueHighlight]} numberOfLines={1}>
+          {value}
+        </Text>
+        {sub ? <Text style={styles.confirmSub}>{sub}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -1060,6 +1074,24 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
     paddingVertical: space.lg,
+  },
+  gasToggle: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.accent.base,
+    textAlign: 'center' as const,
+    paddingVertical: space.md,
+    marginBottom: space.md,
+  },
+  gasCard: {
+    padding: space.xl,
+    marginBottom: space['2xl'],
+  },
+  confirmSub: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
+    marginTop: 2,
   },
   confirmValueHighlight: {
     fontSize: text.lg,

@@ -76,7 +76,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           <Text style={styles.title}>Fund Gas Relayer</Text>
           <Text style={styles.subtitle}>
             A small deposit is needed to activate your transaction relayer
-            on this network. This is a one-time setup cost.
+            on this network.
           </Text>
         </View>
 
