@@ -10,7 +10,7 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend } from '@/services/safe-transaction';
+import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, type TransactionFeeEstimate } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, estimateRecommendedFunding, formatWei, type FundingNeeded } from '@/services/bundler-service';
@@ -101,7 +101,7 @@ export default function SendScreen() {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [estimatedGas, setEstimatedGas] = useState<string | null>(null);
+  const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
@@ -204,7 +204,7 @@ export default function SendScreen() {
 
       // Show confirm screen right away
       setEstimatingGas(true);
-      setEstimatedGas(null);
+      setFeeEstimate(null);
       setStep('confirm');
 
       // Load gas + check bundler funding in background
@@ -216,7 +216,7 @@ export default function SendScreen() {
           ]);
 
           const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
-          setEstimatedGas(fee ? formatWeiToEth(fee.totalWei) : null);
+          setFeeEstimate(fee);
 
           const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
           if (funding) {
@@ -231,11 +231,35 @@ export default function SendScreen() {
     }
   };
 
-  const handleMaxAmount = () => {
+  const handleMaxAmount = async () => {
     if (!selectedToken) return;
-    // Use the raw balance string directly to avoid floating-point precision loss.
-    // tokenBalanceDouble() converts through parseFloat which loses precision for
-    // large balances (e.g., 1234567890.123456789 → scientific notation).
+
+    // For native tokens (ETH, BNB, etc.), reserve gas for the EntryPoint prefund.
+    // The Safe must hold: transferAmount + prefund, so max = balance - prefund.
+    if (isNativeToken(selectedToken) && activeAccount) {
+      try {
+        const chainId = tokenChainId(selectedToken);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId);
+        const balanceWei = BigInt(
+          Math.floor(tokenBalanceDouble(selectedToken) * 1e18).toString(),
+        );
+        const reserveWei = fee.totalWei;
+        if (balanceWei > reserveWei) {
+          const maxWei = balanceWei - reserveWei;
+          const maxEth = Number(maxWei) / 1e18;
+          // Show enough decimals without trailing zeros
+          setAmount(maxEth.toFixed(18).replace(/\.?0+$/, ''));
+          return;
+        }
+        // Balance too low to cover gas — set to 0
+        setAmount('0');
+        return;
+      } catch {
+        // Estimation failed — fall through to full balance (tx may fail but user sees the error)
+      }
+    }
+
+    // ERC-20 tokens: gas is paid in native token, so full balance is sendable
     setAmount(selectedToken.balance || '0');
   };
 
@@ -584,11 +608,53 @@ export default function SendScreen() {
             )}
             <View style={styles.confirmSeparator} />
             <ConfirmRow label="Network" value={chainName(tokenChainId(selectedToken))} />
-            <View style={styles.confirmSeparator} />
-            <ConfirmRow
-              label="Est. Fee"
-              value={estimatingGas ? 'Estimating...' : estimatedGas ? `~${estimatedGas} ${nativeSymbol(tokenChainId(selectedToken))}` : 'Unable to estimate'}
-            />
+          </VelaCard>
+
+          {/* Gas Fee Breakdown */}
+          <VelaCard elevated style={styles.confirmCard}>
+            <Text style={styles.gasTitle}>Gas Details</Text>
+            {estimatingGas ? (
+              <Text style={styles.gasEstimating}>Estimating gas...</Text>
+            ) : feeEstimate ? (() => {
+              const sym = nativeSymbol(tokenChainId(selectedToken));
+              const chainGasGwei = Number(feeEstimate.onChainGasPrice) / 1e9;
+              const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
+              const feeNative = Number(feeEstimate.totalWei) / 1e18;
+              // Estimate native token price from selectedToken if it's native, otherwise from tokens list
+              const nativePrice = isNativeToken(selectedToken)
+                ? (selectedToken.priceUsd ?? 0)
+                : (tokens.find(t => isNativeToken(t) && tokenChainId(t) === tokenChainId(selectedToken))?.priceUsd ?? 0);
+              const feeUsd = feeNative * nativePrice;
+              const totalUsd = usdAmount + feeUsd;
+              return (
+                <>
+                  <ConfirmRow label="Gas Price (chain)" value={`${chainGasGwei.toFixed(4)} Gwei`} />
+                  <View style={styles.confirmSeparator} />
+                  <ConfirmRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
+                  <View style={styles.confirmSeparator} />
+                  <ConfirmRow label="Gas Limit" value={feeEstimate.totalGas.toLocaleString()} />
+                  <View style={styles.confirmSeparator} />
+                  <ConfirmRow
+                    label="Est. Fee"
+                    value={`~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`}
+                  />
+                  {feeUsd > 0.001 && (
+                    <>
+                      <View style={styles.confirmSeparator} />
+                      <ConfirmRow label="Fee (USD)" value={`~${formatUsd(feeUsd)}`} />
+                    </>
+                  )}
+                  <View style={styles.confirmSeparator} />
+                  <ConfirmRow
+                    label="Total Cost"
+                    value={totalUsd > 0.001 ? formatUsd(totalUsd) : '-'}
+                    highlight
+                  />
+                </>
+              );
+            })() : (
+              <Text style={styles.gasEstimating}>Unable to estimate</Text>
+            )}
           </VelaCard>
 
           {txStatus === 'idle' && (
@@ -975,6 +1041,20 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     maxWidth: '60%',
     textAlign: 'right',
+  },
+  gasTitle: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.muted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+    marginBottom: space.md,
+  },
+  gasEstimating: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    paddingVertical: space.lg,
   },
   confirmValueHighlight: {
     fontSize: text.lg,

@@ -57,10 +57,10 @@ export interface FundingNeeded {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Default recommended initial funding: 10M gas × estimated gas price. */
-const RECOMMENDED_GAS_UNITS = 10_000_000n;
+/** Recommended funding: 2M gas — enough for ~2-3 simple transactions. */
+const RECOMMENDED_GAS_UNITS = 2_000_000n;
 /** Minimum balance threshold — below this, prompt funding. */
-const MIN_BALANCE_WEI = BigInt('500000000000000'); // 0.0005 ETH
+const MIN_BALANCE_WEI = BigInt('100000000000000'); // 0.0001 ETH
 
 // ---------------------------------------------------------------------------
 // Cache
@@ -93,12 +93,11 @@ export async function checkBundlerFunding(
   console.log(`[BundlerFunding] account info:`, info ? `deposit=${info.depositAddress} balance=${info.spendableBalance} status=${info.status}` : 'unreachable');
   if (!info) return null; // Can't reach bundler — let the transaction attempt proceed
 
-  // Check if balance is sufficient.
-  // The bundler requires: spendableBalance >= expectedCost × balanceReserveMultiplier (2x).
-  // expectedCost ≈ totalGas × outerGasPrice (which includes bundler tip).
-  // Use 4x the wallet's gas estimate to match: 2x for bundler's outerGasPrice overhead, 2x for reserve.
+  // Check if balance is sufficient for this transaction.
+  // Must match bundler server's balanceReserveMultiplier (2x) to avoid
+  // the client saying "OK" but the server rejecting with insufficient balance.
   const threshold = estimatedGasCostWei
-    ? estimatedGasCostWei * 4n
+    ? estimatedGasCostWei * 2n
     : MIN_BALANCE_WEI;
 
   console.log(`[BundlerFunding] threshold=${threshold} spendable=${info.spendableBalance} sufficient=${info.spendableBalance >= threshold} (gasCost=${estimatedGasCostWei ?? 'default'})`);

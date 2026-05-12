@@ -152,11 +152,25 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 // Gas Estimation (public)
 // ---------------------------------------------------------------------------
 
+/** Detailed gas fee estimate for display and max-send calculation. */
+export interface TransactionFeeEstimate {
+  /** Total estimated cost in wei (totalGas × maxFeePerGas). */
+  totalWei: bigint;
+  /** UserOp maxFeePerGas (gasPrice × 1.3). */
+  maxFeePerGas: bigint;
+  /** On-chain gas price from eth_gasPrice. */
+  onChainGasPrice: bigint;
+  /** Total gas units (verification + call + preVerification). */
+  totalGas: bigint;
+  /** Whether the wallet is already deployed on this chain. */
+  deployed: boolean;
+}
+
 /** Estimate the total gas fee in wei for a transaction. */
 export async function estimateTransactionFee(
   from: string,
   chainId: number,
-): Promise<{ totalWei: bigint; maxFeePerGas: bigint; totalGas: bigint }> {
+): Promise<TransactionFeeEstimate> {
   const [deployed, { maxFee }] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
@@ -169,7 +183,10 @@ export async function estimateTransactionFee(
   const totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
   const totalWei = totalGas * maxFee;
 
-  return { totalWei, maxFeePerGas: maxFee, totalGas };
+  // Derive on-chain gasPrice: maxFee = gasPrice × 1.3, so gasPrice = maxFee / 1.3
+  const onChainGasPrice = (maxFee * 10n) / 13n;
+
+  return { totalWei, maxFeePerGas: maxFee, onChainGasPrice, totalGas, deployed };
 }
 
 /** Format wei to a human-readable ETH-like string. */
