@@ -362,16 +362,50 @@ export default function AddTokenScreen() {
             )}
 
             {netLoading && <Text style={styles.searchHint}>Checking compatibility...</Text>}
-            {netError && (
-              <VelaCard style={styles.errorCard}>
-                <Text style={styles.errorText}>{netError}</Text>
-                {netChainInfo && (
-                  <Pressable onPress={() => openBrowser(`https://biubiu.tools/apps/vela-wallet-chain-setup?chainId=${netChainInfo.chainId}`)}>
-                    <Text style={styles.errorLink}>Deploy required contracts on biubiu.tools ↗</Text>
-                  </Pressable>
-                )}
-              </VelaCard>
+            {netError && netCompat && !netCompat.compatible && (
+              <Animated.View entering={fadeInDown(0, 300)}>
+                <VelaCard elevated style={styles.compatCard}>
+                  <Text style={styles.compatTitle}>Compatibility Check</Text>
+
+                  {/* Contract checklist */}
+                  {netCompat.contracts.map((c) => (
+                    <View key={c.address} style={styles.compatRow}>
+                      {c.deployed ? (
+                        <Check size={14} color={color.success.base} strokeWidth={2.5} />
+                      ) : (
+                        <X size={14} color={color.fg.subtle} strokeWidth={2} />
+                      )}
+                      <Text style={[styles.compatName, c.deployed && styles.compatNameOk]}>
+                        {c.name}
+                      </Text>
+                    </View>
+                  ))}
+
+                  {/* P256 status */}
+                  <View style={styles.compatRow}>
+                    {netCompat.p256Available ? (
+                      <Check size={14} color={color.success.base} strokeWidth={2.5} />
+                    ) : (
+                      <X size={14} color={color.fg.subtle} strokeWidth={2} />
+                    )}
+                    <Text style={[styles.compatName, netCompat.p256Available && styles.compatNameOk]}>
+                      P256 Precompile (RIP-7212)
+                    </Text>
+                  </View>
+
+                  {/* Deploy link */}
+                  {netChainInfo && (
+                    <Pressable
+                      style={styles.compatAction}
+                      onPress={() => openBrowser(`https://biubiu.tools/apps/vela-wallet-chain-setup?chainId=${netChainInfo.chainId}`)}
+                    >
+                      <Text style={styles.compatActionText}>Deploy missing contracts ↗</Text>
+                    </Pressable>
+                  )}
+                </VelaCard>
+              </Animated.View>
             )}
+            {netError && !netCompat && <Text style={styles.errorText}>{netError}</Text>}
 
             {netChainInfo && netCompat?.compatible && (
               <Animated.View entering={fadeInDown(0, 300)}>
@@ -566,21 +600,49 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
     marginTop: space.md,
   },
-  errorCard: {
-    marginTop: space.md,
-    padding: space.xl,
-  },
   errorText: {
     fontSize: text.sm,
     ...inter.medium,
     color: color.error.base,
-    lineHeight: 20,
+    marginTop: space.md,
   },
-  errorLink: {
+  compatCard: {
+    padding: space.xl,
+    marginTop: space.xl,
+  },
+  compatTitle: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.muted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+    marginBottom: space.lg,
+  },
+  compatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
+  },
+  compatName: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+  },
+  compatNameOk: {
+    color: color.fg.base,
+  },
+  compatAction: {
+    marginTop: space.xl,
+    paddingVertical: space.lg,
+    backgroundColor: color.accent.soft,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+  },
+  compatActionText: {
     fontSize: text.sm,
     ...inter.semibold,
     color: color.accent.base,
-    marginTop: space.md,
   },
   suggestionsCard: {
     marginTop: space.md,
