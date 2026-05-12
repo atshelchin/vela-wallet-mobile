@@ -15,8 +15,14 @@ import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
 import { rpcCall } from '@/services/rpc-adapter';
 import { MULTICALL3, encAggregate3, decAggregate3 } from '@/services/abi';
-import { Check, ArrowLeft, ChevronDown, Search, X, ScanLine } from 'lucide-react-native';
+import { Check, ArrowLeft, ChevronDown, Search, X, ScanLine, Globe } from 'lucide-react-native';
 import { QRScanner } from '@/components/QRScanner';
+import { searchChains, fetchChainInfo, type ChainSearchResult } from '@/services/chain-registry';
+import { checkNetworkCompatibility } from '@/services/network-checker';
+import { saveCustomNetwork, loadCustomNetworks } from '@/services/storage';
+import { refreshCustomNetworks, DEFAULT_NETWORKS } from '@/models/network';
+import { openBrowser } from '@/services/platform';
+import type { CustomNetwork, CompatibilityResult } from '@/models/types';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -158,9 +164,13 @@ function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n
 // Main
 // ---------------------------------------------------------------------------
 
+type Tab = 'erc20' | 'network';
+
 export default function AddTokenScreen() {
   const router = useSafeRouter();
+  const [tab, setTab] = useState<Tab>('erc20');
 
+  // ERC-20 state
   const [contractAddress, setContractAddress] = useState('');
   const [selectedChainId, setSelectedChainId] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -168,7 +178,88 @@ export default function AddTokenScreen() {
   const [saving, setSaving] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
+  // Network state
+  const [netQuery, setNetQuery] = useState('');
+  const [netSuggestions, setNetSuggestions] = useState<ChainSearchResult[]>([]);
+  const [netSearching, setNetSearching] = useState(false);
+  const [netChainInfo, setNetChainInfo] = useState<any>(null);
+  const [netCompat, setNetCompat] = useState<CompatibilityResult | null>(null);
+  const [netLoading, setNetLoading] = useState(false);
+  const [netSaving, setNetSaving] = useState(false);
+  const [netError, setNetError] = useState<string | null>(null);
+
   const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId) ?? getAllNetworksSync()[0];
+
+  // --- Network tab logic ---
+  const handleNetSearch = async (q: string) => {
+    setNetQuery(q);
+    setNetChainInfo(null);
+    setNetCompat(null);
+    setNetError(null);
+    if (q.trim().length < 2) { setNetSuggestions([]); return; }
+    setNetSearching(true);
+    try {
+      const results = await searchChains(q.trim());
+      setNetSuggestions(results.slice(0, 8));
+    } catch { setNetSuggestions([]); }
+    setNetSearching(false);
+  };
+
+  const handleNetSelect = async (chainId: number) => {
+    setNetSuggestions([]);
+    setNetLoading(true);
+    setNetError(null);
+    try {
+      const existing = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+      const custom = await loadCustomNetworks();
+      if (existing || custom.find(n => n.chainId === chainId)) {
+        setNetError('This network is already added');
+        setNetLoading(false);
+        return;
+      }
+      const info = await fetchChainInfo(chainId);
+      if (!info) { setNetError('Chain info not found'); setNetLoading(false); return; }
+      setNetChainInfo(info);
+      const compat = await checkNetworkCompatibility(info.rpcUrls, chainId);
+      setNetCompat(compat);
+      if (!compat.compatible) {
+        setNetError(compat.error ?? 'Not compatible with Vela Wallet');
+      }
+    } catch (err) {
+      setNetError(err instanceof Error ? err.message : 'Failed to fetch chain info');
+    }
+    setNetLoading(false);
+  };
+
+  const handleNetAdd = async () => {
+    if (!netChainInfo || !netCompat?.compatible) return;
+    setNetSaving(true);
+    try {
+      const network: CustomNetwork = {
+        id: `custom-${netChainInfo.chainId}`,
+        displayName: netChainInfo.name,
+        chainId: netChainInfo.chainId,
+        iconLabel: (netChainInfo.nativeCurrency?.symbol ?? 'ETH').slice(0, 4),
+        iconColor: '#888888',
+        iconBg: '#F0F0F0',
+        logoURL: netChainInfo.logoURL ?? '',
+        isL2: false,
+        rpcURL: netCompat.bestRpcUrl ?? netChainInfo.rpcUrl ?? '',
+        explorerURL: netChainInfo.explorerUrl ?? '',
+        bundlerURL: `https://bundler.getvela.app/${netChainInfo.chainId}`,
+        nativeSymbol: netChainInfo.nativeCurrency?.symbol ?? 'ETH',
+        addedAt: new Date().toISOString(),
+      };
+      await saveCustomNetwork(network);
+      await refreshCustomNetworks();
+      showAlert('Network Added', `${netChainInfo.name} has been added.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch {
+      showAlert('Error', 'Failed to add network.');
+    }
+    setNetSaving(false);
+  };
 
   const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(contractAddress);
 
@@ -232,7 +323,93 @@ export default function AddTokenScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        {/* Network selector */}
+        {/* Tab switcher */}
+        <View style={styles.tabRow}>
+          <Pressable style={[styles.tab, tab === 'erc20' && styles.tabActive]} onPress={() => setTab('erc20')}>
+            <Text style={[styles.tabText, tab === 'erc20' && styles.tabTextActive]}>ERC-20 Token</Text>
+          </Pressable>
+          <Pressable style={[styles.tab, tab === 'network' && styles.tabActive]} onPress={() => setTab('network')}>
+            <Globe size={14} color={tab === 'network' ? color.accent.base : color.fg.subtle} strokeWidth={2} />
+            <Text style={[styles.tabText, tab === 'network' && styles.tabTextActive]}>Native Token</Text>
+          </Pressable>
+        </View>
+
+        {tab === 'network' ? (
+          <>
+            <Text style={styles.fieldLabel}>Search Network</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Name or chain ID (e.g. Avalanche, 43114)"
+              placeholderTextColor={color.fg.subtle}
+              value={netQuery}
+              onChangeText={handleNetSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            {netSearching && <Text style={styles.searchHint}>Searching...</Text>}
+
+            {netSuggestions.length > 0 && (
+              <VelaCard style={styles.suggestionsCard}>
+                {netSuggestions.map((s, i) => (
+                  <React.Fragment key={s.chainId}>
+                    {i > 0 && <View style={styles.separator} />}
+                    <Pressable style={styles.suggestionRow} onPress={() => { setNetQuery(s.name); handleNetSelect(s.chainId); }}>
+                      <Text style={styles.suggestionName}>{s.name}</Text>
+                      <Text style={styles.suggestionChainId}>Chain {s.chainId}</Text>
+                    </Pressable>
+                  </React.Fragment>
+                ))}
+              </VelaCard>
+            )}
+
+            {netLoading && <Text style={styles.searchHint}>Checking compatibility...</Text>}
+            {netError && (
+              <VelaCard style={styles.errorCard}>
+                <Text style={styles.errorText}>{netError}</Text>
+                {netChainInfo && (
+                  <Pressable onPress={() => openBrowser(`https://biubiu.tools/apps/vela-wallet-chain-setup?chainId=${netChainInfo.chainId}`)}>
+                    <Text style={styles.errorLink}>Deploy required contracts on biubiu.tools ↗</Text>
+                  </Pressable>
+                )}
+              </VelaCard>
+            )}
+
+            {netChainInfo && netCompat?.compatible && (
+              <Animated.View entering={fadeInDown(0, 300)}>
+                <VelaCard elevated style={styles.resultCard}>
+                  <View style={styles.resultHeader}>
+                    <Check size={20} color={color.success.base} strokeWidth={2.5} />
+                    <Text style={styles.resultTitle}>Compatible</Text>
+                  </View>
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Name</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.name}</Text>
+                  </View>
+                  <View style={styles.separator} />
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Chain ID</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.chainId}</Text>
+                  </View>
+                  <View style={styles.separator} />
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Native Token</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.symbol}</Text>
+                  </View>
+                  <VelaButton
+                    title="Add Network"
+                    onPress={handleNetAdd}
+                    variant="accent"
+                    loading={netSaving}
+                    style={styles.saveBtn}
+                  />
+                </VelaCard>
+              </Animated.View>
+            )}
+          </>
+        ) : (
+          <>
+        {/* ERC-20 tab content */}
         <Text style={styles.fieldLabel}>Network</Text>
         <NetworkPicker
           selected={selectedNetwork}
@@ -307,6 +484,8 @@ export default function AddTokenScreen() {
             </VelaCard>
           </Animated.View>
         )}
+          </>
+        )}
       </ScrollView>
 
       {showScanner && (
@@ -351,6 +530,82 @@ const styles = createStyles(() => ({
     color: color.fg.base,
   },
   navSpacer: { minWidth: 50 },
+
+  // Tabs
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    padding: 3,
+    marginBottom: space.xl,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+  },
+  tabActive: {
+    backgroundColor: color.bg.raised,
+    ...shadow.sm,
+  },
+  tabText: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.subtle,
+  },
+  tabTextActive: {
+    color: color.accent.base,
+  },
+
+  // Network search
+  searchHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    marginTop: space.md,
+  },
+  errorCard: {
+    marginTop: space.md,
+    padding: space.xl,
+  },
+  errorText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.error.base,
+    lineHeight: 20,
+  },
+  errorLink: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.accent.base,
+    marginTop: space.md,
+  },
+  suggestionsCard: {
+    marginTop: space.md,
+    overflow: 'hidden' as const,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+  },
+  suggestionName: {
+    fontSize: text.base,
+    ...inter.medium,
+    color: color.fg.base,
+  },
+  suggestionChainId: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+  },
+
   fieldLabel: {
     fontSize: text.sm,
     ...inter.semibold,
