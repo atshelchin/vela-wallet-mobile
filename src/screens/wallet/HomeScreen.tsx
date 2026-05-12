@@ -820,10 +820,10 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     gap: space.md,
     padding: space.lg,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: color.warning.soft,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#F0DCC8',
+    borderColor: color.warning.border,
     marginBottom: space.lg,
   },
   rpcBannerContent: {
@@ -833,7 +833,7 @@ const styles = createStyles(() => ({
   rpcBannerText: {
     fontSize: text.sm,
     ...inter.semibold,
-    color: '#92600A',
+    color: color.warning.base,
   },
   rpcBannerChips: {
     gap: space.sm,
@@ -898,16 +898,16 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     gap: space.md,
     padding: space.lg,
-    backgroundColor: '#FFF8F0',
+    backgroundColor: color.warning.soft,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#F0DCC8',
+    borderColor: color.warning.border,
   },
   rpcFixWarningText: {
     flex: 1,
     fontSize: text.sm,
     ...inter.regular,
-    color: '#92600A',
+    color: color.warning.base,
     lineHeight: 18,
   },
   rpcFixLabel: {

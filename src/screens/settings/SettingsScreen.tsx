@@ -397,7 +397,7 @@ function ServiceHealthBadge({ health }: { health: ServiceHealth }) {
     ok: { dot: color.success.base, label: `${health.latencyMs ?? 0}ms` },
     not_https: { dot: color.accent.base, label: 'HTTPS required' },
     unreachable: { dot: color.accent.base, label: 'Offline' },
-    invalid_response: { dot: '#E8A317', label: health.detail ?? 'Invalid' },
+    invalid_response: { dot: color.warning.base, label: health.detail ?? 'Invalid' },
   };
   const { dot, label } = cfg[health.status] ?? cfg.unreachable;
   return (
@@ -748,7 +748,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
           {compatResult?.rpcFailed && (
             <VelaCard style={s.addNetCompat}>
               <View style={s.addNetCompatRow}>
-                <AlertTriangle size={16} color={'#E8A317'} strokeWidth={2} />
+                <AlertTriangle size={16} color={color.warning.base} strokeWidth={2} />
                 <Text style={s.addNetCompatText}>Unable to verify — RPC request failed</Text>
               </View>
               <Text style={s.addNetCompatError}>{compatResult.error}</Text>
@@ -1131,7 +1131,7 @@ const styleFactory = () => ({
   addNetResult: { padding: space['2xl'], gap: space.sm, marginBottom: space.lg },
   addNetResultName: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
   addNetResultDetail: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
-  addNetTestnet: { fontSize: text.xs, ...inter.semibold, color: '#E8A317', backgroundColor: '#FFF8E1', paddingHorizontal: space.md, paddingVertical: 2, borderRadius: radius.sm, alignSelf: 'flex-start' as const },
+  addNetTestnet: { fontSize: text.xs, ...inter.semibold, color: color.warning.base, backgroundColor: color.warning.soft, paddingHorizontal: space.md, paddingVertical: 2, borderRadius: radius.sm, alignSelf: 'flex-start' as const },
   addNetCompat: { padding: space.xl, gap: space.md, marginBottom: space.lg },
   addNetCompatTitle: { fontSize: text.sm, ...inter.bold, color: color.fg.base, marginBottom: space.sm },
   contractRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: 4 },

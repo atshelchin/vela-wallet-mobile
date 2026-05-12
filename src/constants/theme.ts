@@ -217,6 +217,8 @@ const LIGHT_COLORS = {
   bg:      { base: '#FAFAF8', raised: '#FFFFFF', sunken: '#F5F3EF' },
   accent:  { base: '#E8572A', soft: '#FFF0EB' },
   success: { base: '#2D8E5F', soft: '#EDFAF2' },
+  warning: { base: '#92600A', soft: '#FFF8F0', border: '#F0DCC8' },
+  error:   { base: '#EF4444', soft: '#FEF2F2' },
   info:    { base: '#4267F4', soft: '#EDF0FF' },
   border:  { base: '#ECEBE4', strong: '#D8D6CE' },
 };
@@ -226,6 +228,8 @@ const DARK_COLORS = {
   bg:      { base: '#141412', raised: '#1E1E1B', sunken: '#0F0F0D' },
   accent:  { base: '#E8572A', soft: '#2C1A12' },
   success: { base: '#3DA872', soft: '#132A1E' },
+  warning: { base: '#D4A54A', soft: '#2A2010', border: '#3D3020' },
+  error:   { base: '#F87171', soft: '#2D1515' },
   info:    { base: '#5A7CF6', soft: '#131B33' },
   border:  { base: '#2C2C28', strong: '#3E3E38' },
 };
@@ -236,6 +240,8 @@ export const color = {
   bg:      { ...LIGHT_COLORS.bg },
   accent:  { ...LIGHT_COLORS.accent },
   success: { ...LIGHT_COLORS.success },
+  warning: { ...LIGHT_COLORS.warning },
+  error:   { ...LIGHT_COLORS.error },
   info:    { ...LIGHT_COLORS.info },
   border:  { ...LIGHT_COLORS.border },
 };

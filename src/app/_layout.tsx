@@ -2,13 +2,13 @@ import '@/global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Appearance, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Appearance, View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { WalletProvider } from '@/models/wallet-state';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
-import { color, rebuildTextScale, rebuildColors } from '@/constants/theme';
+import { color, rebuildTextScale, rebuildColors, createStyles } from '@/constants/theme';
 import { refreshCustomNetworks } from '@/models/network';
 import {
   loadColorScheme,
@@ -79,11 +79,11 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: color.bg.base,
   },
-});
+}));

@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { useWallet } from '@/models/wallet-state';
-import { color } from '@/constants/theme';
+import { color, createStyles } from '@/constants/theme';
 
 export default function Index() {
   const { state } = useWallet();
@@ -20,11 +20,11 @@ export default function Index() {
   return <Redirect href="/onboarding" />;
 }
 
-const styles = StyleSheet.create({
+const styles = createStyles(() => ({
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: color.bg.base,
   },
-});
+}));

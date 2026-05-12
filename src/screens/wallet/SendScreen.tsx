@@ -557,7 +557,7 @@ export default function SendScreen() {
               )}
               {txStatus === 'confirmed' && (
                 <View style={styles.txStatusRow}>
-                  <CheckCircle2 size={20} color="#22C55E" strokeWidth={2.5} />
+                  <CheckCircle2 size={20} color={color.success.base} strokeWidth={2.5} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.txStatusSuccess}>Transaction Confirmed</Text>
                     {txHash && (
@@ -570,7 +570,7 @@ export default function SendScreen() {
               )}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
-                  <AlertCircle size={20} color="#EF4444" strokeWidth={2.5} />
+                  <AlertCircle size={20} color={color.error.base} strokeWidth={2.5} />
                   <Text style={styles.txStatusError}>{txError}</Text>
                 </View>
               )}
@@ -943,7 +943,7 @@ const styles = createStyles(() => ({
   txStatusSuccess: {
     fontSize: text.base,
     ...inter.semibold,
-    color: '#22C55E',
+    color: color.success.base,
   },
   txStatusHash: {
     fontSize: text.xs,
@@ -955,7 +955,7 @@ const styles = createStyles(() => ({
   txStatusError: {
     fontSize: text.base,
     ...inter.medium,
-    color: '#EF4444',
+    color: color.error.base,
     flex: 1,
   },
   txStatusActions: {

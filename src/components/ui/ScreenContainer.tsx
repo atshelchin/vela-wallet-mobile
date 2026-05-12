@@ -14,20 +14,16 @@ interface Props {
 /**
  * Standard screen wrapper with safe area, consistent padding, and keyboard avoidance.
  *
- * Subscribes to text scale context so that when the user changes text size
- * in Settings, this component re-renders.  Because the parent screen also
- * re-renders (SettingsScreen consumes useTextScale), all children receive
- * fresh JSX and the createStyles Proxy returns updated styles automatically.
- *
- * No key-based remounting — pure re-render, zero flicker.
+ * Uses `key={resolved}` so that when the color scheme changes, the entire
+ * children tree remounts with fresh color tokens. Theme switches are rare,
+ * so the brief remount is acceptable for guaranteed correctness.
  */
 export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
-  // Force re-render on text scale / color scheme change so styles.* Proxy returns fresh values
   useTextScale();
-  useColorSchemePreference();
+  const { resolved } = useColorSchemePreference();
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style]} key={resolved}>
       <SafeAreaView style={styles.safeArea} edges={edges}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoiding}

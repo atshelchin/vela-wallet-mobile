@@ -254,7 +254,7 @@ const styles = createStyles(() => ({
     fontFamily: font.mono,
   },
   infoValueGreen: {
-    color: '#22C55E',
+    color: color.success.base,
   },
   divider: {
     height: 1,

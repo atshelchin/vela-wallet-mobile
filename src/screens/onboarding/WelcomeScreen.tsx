@@ -74,7 +74,7 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) 
             disabled={loginLoading}
           >
             {loginLoading ? (
-              <ActivityIndicator color={color.fg.subtle} />
+              <ActivityIndicator color="rgba(255,255,255,0.5)" />
             ) : (
               <Text style={styles.secondaryBtnText}>I already have a wallet</Text>
             )}
@@ -88,7 +88,7 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) 
 const styles = createStyles(() => ({
   container: {
     flex: 1,
-    backgroundColor: color.fg.base,
+    backgroundColor: '#1A1A18', // Always dark — brand identity screen
   },
   safeArea: {
     flex: 1,
@@ -102,11 +102,11 @@ const styles = createStyles(() => ({
   logo: {
     fontSize: 48,
     ...inter.bold,
-    color: color.fg.inverse,
+    color: '#FFFFFF', // Always white on dark brand screen
     letterSpacing: 3,
   },
   logoAccent: {
-    color: color.accent.base,
+    color: '#E8572A', // Hardcoded accent for brand screen
   },
   tagline: {
     fontSize: text.lg,
@@ -123,14 +123,14 @@ const styles = createStyles(() => ({
   primaryBtn: {
     paddingVertical: space['2xl'],
     borderRadius: radius.xl,
-    backgroundColor: color.accent.base,
+    backgroundColor: '#E8572A',
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryBtnText: {
     fontSize: text.lg,
     ...inter.bold,
-    color: color.fg.inverse,
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   secondaryBtn: {
