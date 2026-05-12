@@ -10,6 +10,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useWallet } from '@/models/wallet-state';
 import { saveAccount, savePendingUpload } from '@/services/storage';
 import { computeAddress } from '@/services/safe-address';
+import { getAllNetworksSync } from '@/models/network';
 import { extractPublicKey } from '@/services/attestation-parser';
 import { fromHex, toHex } from '@/services/hex';
 import * as Passkey from '@/modules/passkey';
@@ -217,7 +218,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             </View>
             <Text style={styles.successTitle}>Your wallet is ready!</Text>
             <Text style={styles.successMessage}>
-              Your address works on all 7 supported networks.
+              Your address works on all {getAllNetworksSync().length} supported networks.
             </Text>
 
             {/* Address display */}
