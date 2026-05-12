@@ -25,9 +25,10 @@ import { showAlert, copyToClipboard } from '@/services/platform';
 interface Props {
   onCreated?: (address: string, name: string) => void;
   onBack?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function CreateWalletScreen({ onCreated, onBack }: Props) {
+export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
@@ -252,8 +253,13 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
               </VelaCard>
             ) : null}
             <Text style={styles.hint}>
-              Please check your network connection and try again.
+              Check your network connection, or configure a custom Passkey Index endpoint in Settings.
             </Text>
+            {onOpenSettings && (
+              <Pressable style={styles.settingsLink} onPress={onOpenSettings}>
+                <Text style={styles.settingsLinkText}>Open Settings</Text>
+              </Pressable>
+            )}
           </Animated.View>
         ) : (
           <Animated.View entering={fadeIn(0, 400)}>
@@ -460,5 +466,16 @@ const styles = createStyles(() => ({
     textAlign: 'center',
     lineHeight: 18,
     marginTop: space.sm,
+  },
+  settingsLink: {
+    marginTop: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+  },
+  settingsLinkText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+    textDecorationLine: 'underline',
   },
 }));

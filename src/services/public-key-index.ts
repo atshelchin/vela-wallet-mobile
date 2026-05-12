@@ -5,7 +5,28 @@
  * required — the server wallet signs transactions automatically.
  */
 
-const BASE_URL = 'https://webauthnp256-publickey-index.biubiu.tools';
+import { loadServiceEndpoints } from './storage';
+import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
+
+const FALLBACK_URL = DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL;
+
+/** Cached base URL — refreshed from storage on each call to avoid stale config. */
+let _cachedUrl: string | null = null;
+let _cachedAt = 0;
+const CACHE_TTL = 5_000; // 5s — re-read storage periodically in case user changes it
+
+async function getBaseUrl(): Promise<string> {
+  const now = Date.now();
+  if (_cachedUrl && now - _cachedAt < CACHE_TTL) return _cachedUrl;
+  try {
+    const endpoints = await loadServiceEndpoints();
+    _cachedUrl = endpoints.passkeyIndexURL?.trim().replace(/\/$/, '') || FALLBACK_URL;
+  } catch {
+    _cachedUrl = FALLBACK_URL;
+  }
+  _cachedAt = now;
+  return _cachedUrl;
+}
 
 export interface PublicKeyRecord {
   rpId: string;
@@ -28,7 +49,8 @@ interface CreateRequest {
 
 /** Store a public key record. No signature needed — server signs on-chain tx. */
 export async function createRecord(request: CreateRequest): Promise<PublicKeyRecord> {
-  const response = await fetch(`${BASE_URL}/api/create`, {
+  const baseUrl = await getBaseUrl();
+  const response = await fetch(`${baseUrl}/api/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -42,7 +64,8 @@ export async function createRecord(request: CreateRequest): Promise<PublicKeyRec
 
 /** Query a public key by rpId and credentialId. */
 export async function queryRecord(rpId: string, credentialId: string): Promise<PublicKeyRecord> {
-  const url = `${BASE_URL}/api/query?rpId=${encodeURIComponent(rpId)}&credentialId=${encodeURIComponent(credentialId)}`;
+  const baseUrl = await getBaseUrl();
+  const url = `${baseUrl}/api/query?rpId=${encodeURIComponent(rpId)}&credentialId=${encodeURIComponent(credentialId)}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Query failed: ${response.status}`);
   return response.json();

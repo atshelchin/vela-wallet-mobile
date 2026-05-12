@@ -13,7 +13,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { loadServiceEndpoints, saveServiceEndpoints } from '@/services/storage';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import type { ServiceEndpoints } from '@/models/types';
-import { Settings, X, RefreshCw, Sun, Moon, Monitor } from 'lucide-react-native';
+import { X, RefreshCw, Sun, Moon, Monitor, AlertTriangle } from 'lucide-react-native';
 import { hapticLight } from '@/services/platform';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -86,39 +86,28 @@ const THEME_OPTIONS: { key: ColorSchemePreference; label: string; Icon: React.Co
   { key: 'auto', label: 'Auto', Icon: Monitor },
 ];
 
-function OnboardingSettingsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function OnboardingSettingsModal({ visible, onClose, unreachable }: { visible: boolean; onClose: () => void; unreachable?: boolean }) {
   const [endpoints, setEndpoints] = useState<ServiceEndpoints>({ ...DEFAULT_SERVICE_ENDPOINTS });
-  const [healths, setHealths] = useState<Record<string, ServiceHealth>>({});
+  const [health, setHealth] = useState<ServiceHealth>({ status: 'checking' });
   const [refreshCount, setRefreshCount] = useState(0);
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
 
   useEffect(() => { if (visible) loadServiceEndpoints().then(setEndpoints); }, [visible]);
 
+  // Only check the Passkey Index — it's the only endpoint needed for onboarding
   useEffect(() => {
     if (!visible) return;
-    const keys = ['ethereumDataURL', 'passkeyIndexURL', 'bundlerServiceURL'] as const;
-    const types = ['data', 'passkey', 'bundler'] as const;
-    setHealths(Object.fromEntries(keys.map(k => [k, { status: 'checking' as const }])));
-    keys.forEach((key, i) => {
-      checkServiceEndpointHealth(endpoints[key], types[i]).then(h => {
-        setHealths(prev => ({ ...prev, [key]: h }));
-      });
-    });
+    setHealth({ status: 'checking' });
+    checkServiceEndpointHealth(endpoints.passkeyIndexURL, 'passkey').then(setHealth);
   }, [visible, refreshCount]);
 
-  const handleSave = useCallback(async (field: keyof ServiceEndpoints, value: string) => {
+  const handleSave = useCallback(async (value: string) => {
     const clean = value.trim().replace(/[\r\n]/g, '');
-    const updated = { ...endpoints, [field]: clean };
+    const updated = { ...endpoints, passkeyIndexURL: clean };
     setEndpoints(updated);
     await saveServiceEndpoints(updated);
     setRefreshCount(c => c + 1);
   }, [endpoints]);
-
-  const fields: { key: keyof ServiceEndpoints; label: string }[] = [
-    { key: 'ethereumDataURL', label: 'Chain Data Index' },
-    { key: 'passkeyIndexURL', label: 'Passkey Index' },
-    { key: 'bundlerServiceURL', label: 'Bundler Service' },
-  ];
 
   return (
     <AppModal visible={visible} onClose={onClose}>
@@ -135,6 +124,17 @@ function OnboardingSettingsModal({ visible, onClose }: { visible: boolean; onClo
           </View>
         </View>
         <ScrollView style={settingsStyles.scroll} contentContainerStyle={settingsStyles.scrollContent} keyboardShouldPersistTaps="handled">
+          {/* Warning banner when auto-shown due to unreachable endpoint */}
+          {unreachable && (
+            <View style={settingsStyles.warningBanner}>
+              <AlertTriangle size={18} color="#E8572A" strokeWidth={2} />
+              <Text style={settingsStyles.warningText}>
+                The Passkey Index service is unreachable. Wallet creation and sign-in require this service.
+                Please configure a reachable endpoint below.
+              </Text>
+            </View>
+          )}
+
           {/* Theme */}
           <Text style={settingsStyles.sectionLabel}>APPEARANCE</Text>
           <View style={settingsStyles.themeRow}>
@@ -150,36 +150,51 @@ function OnboardingSettingsModal({ visible, onClose }: { visible: boolean; onClo
             })}
           </View>
 
-          {/* Service Endpoints */}
-          <Text style={settingsStyles.sectionLabel}>SERVICE ENDPOINTS</Text>
+          {/* Passkey Index — the only endpoint needed for onboarding */}
+          <Text style={settingsStyles.sectionLabel}>PASSKEY INDEX</Text>
           <Text style={settingsStyles.hint}>
-            If the default services are unreachable in your region, configure your own endpoints here.
+            This service stores your public key for cross-device wallet recovery.
+            It is the only service required for wallet creation and sign-in.
           </Text>
-          {fields.map(({ key, label }) => (
-            <View key={key} style={settingsStyles.field}>
-              <View style={settingsStyles.fieldHeader}>
-                <Text style={settingsStyles.fieldLabel}>{label}</Text>
-                <HealthDot health={healths[key] ?? { status: 'checking' }} />
-              </View>
-              <TextInput
-                style={settingsStyles.input}
-                value={endpoints[key]}
-                onChangeText={(v) => setEndpoints({ ...endpoints, [key]: v })}
-                onBlur={() => handleSave(key, endpoints[key])}
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder={DEFAULT_SERVICE_ENDPOINTS[key]}
-                placeholderTextColor={color.fg.subtle}
-              />
+          <View style={settingsStyles.field}>
+            <View style={settingsStyles.fieldHeader}>
+              <Text style={settingsStyles.fieldLabel}>Endpoint URL</Text>
+              <HealthDot health={health} />
             </View>
-          ))}
+            <TextInput
+              style={settingsStyles.input}
+              value={endpoints.passkeyIndexURL}
+              onChangeText={(v) => setEndpoints({ ...endpoints, passkeyIndexURL: v })}
+              onBlur={() => handleSave(endpoints.passkeyIndexURL)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL}
+              placeholderTextColor={color.fg.subtle}
+            />
+          </View>
           <Pressable style={settingsStyles.resetBtn} onPress={() => {
-            setEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS });
-            saveServiceEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS });
+            const updated = { ...endpoints, passkeyIndexURL: DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL };
+            setEndpoints(updated);
+            saveServiceEndpoints(updated);
             setRefreshCount(c => c + 1);
           }}>
-            <Text style={settingsStyles.resetText}>Reset to Defaults</Text>
+            <Text style={settingsStyles.resetText}>Reset to Default</Text>
           </Pressable>
+
+          {/* Debug: simulate endpoint failure */}
+          {__DEV__ && (
+            <>
+              <Text style={settingsStyles.sectionLabel}>DEBUG</Text>
+              <Pressable style={settingsStyles.debugBtn} onPress={() => {
+                const broken = 'https://invalid.endpoint.test';
+                setEndpoints({ ...endpoints, passkeyIndexURL: broken });
+                saveServiceEndpoints({ ...endpoints, passkeyIndexURL: broken });
+                setRefreshCount(c => c + 1);
+              }}>
+                <Text style={settingsStyles.debugBtnText}>Simulate Endpoint Failure</Text>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       </View>
     </AppModal>
@@ -194,6 +209,8 @@ const settingsStyles = createStyles(() => ({
   title: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   scroll: { flex: 1 },
   scrollContent: { padding: space['3xl'], paddingBottom: space['5xl'] },
+  warningBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, backgroundColor: 'rgba(232,87,42,0.08)', borderRadius: radius.lg, padding: space.xl, marginBottom: space.xl, borderWidth: 1, borderColor: 'rgba(232,87,42,0.2)' },
+  warningText: { flex: 1, fontSize: text.sm, ...inter.medium, color: '#E8572A', lineHeight: 20 },
   sectionLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: space.lg, marginTop: space.xl },
   hint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl },
   themeRow: { flexDirection: 'row', gap: space.md, marginBottom: space.lg },
@@ -207,6 +224,8 @@ const settingsStyles = createStyles(() => ({
   input: { fontSize: text.sm, fontWeight: '500', fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base },
   resetBtn: { alignItems: 'center', paddingVertical: space.xl, marginTop: space.sm },
   resetText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
+  debugBtn: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, alignItems: 'center', borderWidth: 1, borderColor: color.border.base },
+  debugBtnText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
 }));
 
 // ---------------------------------------------------------------------------
@@ -217,6 +236,9 @@ interface Props {
   onCreateWallet: () => void;
   onLogin: () => void;
   loginLoading?: boolean;
+  onOpenSettings?: () => void;
+  /** Auto-show settings when Passkey Index is unreachable */
+  autoShowSettings?: boolean;
 }
 
 function AnimatedButton({
@@ -248,19 +270,15 @@ function AnimatedButton({
   );
 }
 
-export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) {
-  const [showSettings, setShowSettings] = useState(false);
+export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading, onOpenSettings, autoShowSettings }: Props) {
+  // Auto-open settings when parent detects endpoint failure
+  useEffect(() => {
+    if (autoShowSettings) onOpenSettings?.();
+  }, [autoShowSettings]);
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Settings gear — top right */}
-        <Animated.View style={styles.settingsRow} entering={fadeIn(400, 600)}>
-          <Pressable onPress={() => setShowSettings(true)} hitSlop={12} style={styles.settingsBtn}>
-            <Settings size={20} color="rgba(255,255,255,0.35)" strokeWidth={2} />
-          </Pressable>
-        </Animated.View>
-
         <View style={styles.logoSection}>
           <Animated.View entering={fadeIn(200, 600)}>
             <Text style={styles.logo}>
@@ -292,8 +310,6 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading }: Props) 
           </AnimatedButton>
         </Animated.View>
       </SafeAreaView>
-
-      <OnboardingSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </View>
   );
 }
@@ -306,17 +322,6 @@ const styles = createStyles(() => ({
   safeArea: {
     flex: 1,
     paddingHorizontal: space['3xl'],
-  },
-  settingsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingTop: space.md,
-  },
-  settingsBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   logoSection: {
     flex: 1,

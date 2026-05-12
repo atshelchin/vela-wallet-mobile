@@ -9,40 +9,89 @@ import { computeAddress } from '@/services/safe-address';
 import { loadAccounts, saveAccount } from '@/services/storage';
 import { useRouter } from 'expo-router';
 import { showAlert } from '@/services/platform';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CreateWalletScreen } from './CreateWalletScreen';
-import { WelcomeScreen } from './WelcomeScreen';
+import { WelcomeScreen, OnboardingSettingsModal } from './WelcomeScreen';
+import { loadServiceEndpoints } from '@/services/storage';
+import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 
 type Step = 'welcome' | 'create';
+
+/** Check if a Passkey Index URL is reachable by hitting /api/health. */
+async function isPasskeyIndexReachable(url: string): Promise<boolean> {
+  const base = url.trim().replace(/\/$/, '');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${base}/api/health?_t=${Date.now()}`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return false;
+    const json = await res.json();
+    return json.service === 'webauthn-p256-publickey-index' && json.status === 'ok';
+  } catch {
+    clearTimeout(timeout);
+    return false;
+  }
+}
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState<Step>('welcome');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [endpointUnreachable, setEndpointUnreachable] = useState(false);
+  const healthCheckDone = useRef(false);
   const router = useRouter();
   const { dispatch } = useWallet();
+
+  // Auto-detect Passkey Index reachability — retry 3 times before flagging
+  useEffect(() => {
+    if (healthCheckDone.current) return;
+    healthCheckDone.current = true;
+
+    (async () => {
+      const endpoints = await loadServiceEndpoints();
+      const url = endpoints.passkeyIndexURL || DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL;
+
+      let failures = 0;
+      for (let i = 0; i < 3; i++) {
+        const ok = await isPasskeyIndexReachable(url);
+        if (ok) return; // reachable — all good
+        failures++;
+        if (i < 2) await new Promise(r => setTimeout(r, 2000)); // wait 2s between retries
+      }
+
+      if (failures >= 3) {
+        setEndpointUnreachable(true);
+        setShowSettings(true);
+      }
+    })();
+  }, []);
 
   async function handleLogin() {
     if (loginLoading) return;
     try {
       setLoginLoading(true);
-      console.log('[Login] Starting login...');
+      __DEV__ && console.log('[Login] Starting login...');
 
       const supported = await Passkey.isSupported();
-      console.log('[Login] Passkey supported:', supported);
+      __DEV__ && console.log('[Login] Passkey supported:', supported);
       if (!supported) {
         showAlert('Not Supported', 'Biometric authentication is not available on this device.');
         return;
       }
 
       // 1. Authenticate with existing passkey
-      console.log('[Login] Calling authenticate()...');
+      __DEV__ && console.log('[Login] Calling authenticate()...');
       const assertion = await Passkey.authenticate();
-      console.log('[Login] credentialId:', assertion.credentialId);
+      __DEV__ && console.log('[Login] credentialId:', assertion.credentialId);
 
       // 2. Verify passkey compatibility with Safe contracts
       const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
       const compat = verifySafeWebAuthn(assertion);
-      console.log('[Login] Safe compat:', compat.ok, compat.reason ?? '');
+      __DEV__ && console.log('[Login] Safe compat:', compat.ok, compat.reason ?? '');
       if (!compat.ok) {
         showAlert(
           'Device Not Compatible',
@@ -53,11 +102,11 @@ export default function OnboardingScreen() {
 
       // 3. Try local AsyncStorage first
       const localAccounts = await loadAccounts();
-      console.log('[Login] Local accounts:', localAccounts.length, localAccounts.map(a => ({ id: a.id.slice(0, 12), name: a.name })));
+      __DEV__ && console.log('[Login] Local accounts:', localAccounts.length, localAccounts.map(a => ({ id: a.id.slice(0, 12), name: a.name })));
       const local = localAccounts.find(a => a.id === assertion.credentialId);
 
       if (local) {
-        console.log('[Login] Found locally:', local.name, local.address);
+        __DEV__ && console.log('[Login] Found locally:', local.name, local.address);
         dispatch({
           type: 'SET_WALLET',
           accounts: localAccounts,
@@ -66,28 +115,28 @@ export default function OnboardingScreen() {
         router.replace('/(tabs)/wallet');
         return;
       }
-      console.log('[Login] Not found locally');
+      __DEV__ && console.log('[Login] Not found locally');
 
       // 3. Try CloudSync (iCloud / Google backup)
-      console.log('[Login] Trying CloudSync...');
+      __DEV__ && console.log('[Login] Trying CloudSync...');
       const cloudAccount = await tryCloudSync(assertion.credentialId);
       if (cloudAccount) {
-        console.log('[Login] Found in CloudSync:', cloudAccount.name, cloudAccount.address);
+        __DEV__ && console.log('[Login] Found in CloudSync:', cloudAccount.name, cloudAccount.address);
         await saveAccount(cloudAccount);
         dispatch({ type: 'ADD_ACCOUNT', account: cloudAccount });
         router.replace('/(tabs)/wallet');
         return;
       }
-      console.log('[Login] Not found in CloudSync');
+      __DEV__ && console.log('[Login] Not found in CloudSync');
 
       // 4. Try public key index server
       const rpId = Passkey.getRelyingPartyId();
-      console.log('[Login] Querying server: rpId=', rpId, 'credentialId=', assertion.credentialId);
+      __DEV__ && console.log('[Login] Querying server: rpId=', rpId, 'credentialId=', assertion.credentialId);
       const record = await PublicKeyIndex.queryRecord(
         rpId,
         assertion.credentialId,
       );
-      console.log('[Login] Server returned:', record.name, 'publicKey:', record.publicKey.slice(0, 16) + '...');
+      __DEV__ && console.log('[Login] Server returned:', record.name, 'publicKey:', record.publicKey.slice(0, 16) + '...');
 
       const address = computeAddress(record.publicKey);
       const userName = record.name || decodeUserNameFromAssertion(assertion.userIdHex);
@@ -118,6 +167,9 @@ export default function OnboardingScreen() {
             '• The public key server is unreachable\n\n' +
             'Try creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.',
           );
+        } else if (msg.includes('Network request failed') || msg.includes('fetch') || msg.includes('Connection failed')) {
+          setEndpointUnreachable(true);
+          setShowSettings(true);
         } else {
           showAlert(
             'Sign In Failed',
@@ -130,21 +182,32 @@ export default function OnboardingScreen() {
     }
   }
 
+  const openSettings = () => setShowSettings(true);
+
   if (step === 'create') {
     return (
-      <CreateWalletScreen
-        onBack={() => setStep('welcome')}
-        onCreated={() => router.replace('/(tabs)/wallet')}
-      />
+      <>
+        <CreateWalletScreen
+          onBack={() => setStep('welcome')}
+          onCreated={() => router.replace('/(tabs)/wallet')}
+          onOpenSettings={openSettings}
+        />
+        <OnboardingSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} unreachable={endpointUnreachable} />
+      </>
     );
   }
 
   return (
-    <WelcomeScreen
-      onCreateWallet={() => setStep('create')}
-      onLogin={handleLogin}
-      loginLoading={loginLoading}
-    />
+    <>
+      <WelcomeScreen
+        onCreateWallet={() => setStep('create')}
+        onLogin={handleLogin}
+        loginLoading={loginLoading}
+        onOpenSettings={openSettings}
+        autoShowSettings={endpointUnreachable}
+      />
+      <OnboardingSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} unreachable={endpointUnreachable} />
+    </>
   );
 }
 
