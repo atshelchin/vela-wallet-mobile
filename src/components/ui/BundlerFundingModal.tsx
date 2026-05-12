@@ -82,7 +82,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* QR Code */}
         <View style={styles.qrWrap}>
-          <QRCode value={funding.depositAddress} size={180} />
+          <QRCode value={funding.depositAddress} size={140} />
         </View>
 
         {/* Deposit address */}
@@ -181,41 +181,43 @@ const styles = createStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: color.bg.base,
-    padding: space['3xl'],
+    paddingHorizontal: space['2xl'],
+    paddingTop: space.xl,
+    paddingBottom: space.lg,
   },
   header: {
     alignItems: 'center',
-    marginBottom: space['2xl'],
+    marginBottom: space.lg,
   },
   title: {
-    fontSize: text['2xl'],
+    fontSize: text.xl,
     ...inter.bold,
     color: color.fg.base,
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
   subtitle: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
 
   qrWrap: {
     alignItems: 'center',
-    padding: space.xl,
+    padding: space.lg,
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
     alignSelf: 'center',
-    marginBottom: space['2xl'],
+    marginBottom: space.lg,
     ...shadow.sm,
   },
 
   addressCard: {
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
-    padding: space.xl,
-    marginBottom: space.xl,
+    padding: space.lg,
+    marginBottom: space.lg,
     borderWidth: 1,
     borderColor: color.border.base,
   },
@@ -246,8 +248,8 @@ const styles = createStyles(() => ({
   },
 
   infoCard: {
-    padding: space.xl,
-    marginBottom: space.xl,
+    padding: space.lg,
+    marginBottom: space.md,
   },
   infoRow: {
     flexDirection: 'row',
@@ -276,23 +278,23 @@ const styles = createStyles(() => ({
   },
 
   note: {
-    fontSize: text.sm,
+    fontSize: text.xs,
     ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: space['2xl'],
+    lineHeight: 18,
+    marginBottom: space.lg,
   },
 
   actions: {
-    gap: space.lg,
+    gap: space.md,
   },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.md,
-    paddingVertical: space.xl,
+    paddingVertical: space.lg,
     borderRadius: radius.xl,
   },
   btnPrimary: {
