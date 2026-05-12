@@ -106,13 +106,6 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {/* Amount info */}
         <VelaCard style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Required</Text>
-            <Text style={styles.infoValue}>
-              {formatWei(requiredWei)} {funding.nativeSym}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Deposit</Text>
             <Text style={styles.infoValue}>
               {funding.recommendedFormatted} {funding.nativeSym}
@@ -120,7 +113,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           </View>
           <View style={styles.divider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Current Balance</Text>
+            <Text style={styles.infoLabel}>Balance</Text>
             <Text style={[styles.infoValue, funded && styles.infoValueGreen]}>
               {currentBalance} {funding.nativeSym}
             </Text>
