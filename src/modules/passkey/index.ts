@@ -22,10 +22,27 @@ const isWeb = Platform.OS === 'web';
 
 export const RELYING_PARTY_NATIVE = 'getvela.app';
 
-/** Web: use current hostname so rpId matches the origin. Native: always getvela.app. */
+/**
+ * Get the relying party ID for WebAuthn.
+ *
+ * Native: always `getvela.app`.
+ * Web: extract the registrable domain from hostname so passkeys work
+ *      across subdomains (e.g. `wallet.getvela.app` → `getvela.app`).
+ *      For localhost / IP addresses, use hostname as-is.
+ */
 export function getRelyingPartyId(): string {
   if (isWeb && typeof window !== 'undefined') {
-    return window.location.hostname;
+    const hostname = window.location.hostname;
+    // localhost or IP address — use as-is
+    if (hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname === '127.0.0.1') {
+      return hostname;
+    }
+    // Extract registrable domain: take last 2 parts (e.g. getvela.app)
+    const parts = hostname.split('.');
+    if (parts.length > 2) {
+      return parts.slice(-2).join('.');
+    }
+    return hostname;
   }
   return RELYING_PARTY_NATIVE;
 }
