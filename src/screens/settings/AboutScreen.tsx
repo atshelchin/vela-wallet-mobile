@@ -1,6 +1,7 @@
 import { openURL } from '@/services/platform';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
+import { getAllNetworksSync } from '@/models/network';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
@@ -11,6 +12,8 @@ import { fadeIn, fadeInDown } from '@/constants/entering';
 
 export default function AboutScreen() {
   const router = useSafeRouter();
+  const networks = useMemo(() => getAllNetworksSync(), []);
+  const networkNames = networks.map(n => n.displayName);
 
   return (
     <ScreenContainer>
@@ -73,7 +76,7 @@ export default function AboutScreen() {
             <View style={styles.separator} />
             <InfoRow number="2" title="Smart contract wallet" body="Powered by Safe — the most battle-tested smart contract wallet, securing $100B+ in assets." />
             <View style={styles.separator} />
-            <InfoRow number="3" title="Works across networks" body="One address on Ethereum, Arbitrum, Base, Optimism, Polygon, BNB Chain, and Avalanche." />
+            <InfoRow number="3" title="Works across networks" body={`One address on ${networkNames.slice(0, -1).join(', ')}, and ${networkNames[networkNames.length - 1]}.`} />
             <View style={styles.separator} />
             <InfoRow number="4" title="Cross-device sign-in" body="Your passkey syncs across devices via iCloud or Google. Vela Wallet never has access to your private key." />
           </VelaCard>
@@ -87,7 +90,7 @@ export default function AboutScreen() {
             <TechRow label="Authentication" value="WebAuthn / P-256" />
             <TechRow label="Account type" value="ERC-4337 (Smart Account)" />
             <TechRow label="Signer module" value="SafeWebAuthnSharedSigner" />
-            <TechRow label="Networks" value="7 EVM chains" />
+            <TechRow label="Networks" value={`${networks.length} EVM chains`} />
           </VelaCard>
         </Animated.View>
 
