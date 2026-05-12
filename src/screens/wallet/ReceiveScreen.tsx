@@ -336,14 +336,13 @@ export default function ReceiveScreen() {
 
           if (changes.length > 0) {
             const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = `${time}  ${changes.join(', ')}`;
             setDepositDetected(true);
-            setDepositDetails(`${time}\n${changes.join('\n')}`);
+            setDepositDetails(prev => prev ? `${entry}\n${prev}` : entry);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // Keep showing until user leaves the page (no auto-dismiss)
-            // Continue listening for more deposits
           }
         }
-        previousTokens.current = tokens;
+        previousTokens.current = tokens; // always update baseline
       } catch {}
 
       const elapsed = Date.now() - startTime;
