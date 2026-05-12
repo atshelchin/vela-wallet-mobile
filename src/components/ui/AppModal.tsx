@@ -14,6 +14,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, createStyles } from '@/constants/theme';
 
 interface Props {
@@ -28,7 +29,9 @@ export function AppModal({ visible, children, onClose }: Props) {
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <View style={styles.nativeRoot}>
           <DragHandle onClose={onClose} />
-          <View style={styles.nativeContent}>{children}</View>
+          <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
+            {children}
+          </SafeAreaView>
         </View>
       </Modal>
     );

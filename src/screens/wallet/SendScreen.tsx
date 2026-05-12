@@ -6,7 +6,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { color, text, inter, space, radius, shadow, motion, createStyles } from '@/constants/theme';
 import { chainName, nativeSymbol } from '@/models/network';
-import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue } from '@/models/types';
+import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
@@ -315,7 +315,7 @@ export default function SendScreen() {
             <TokenRow
               symbol={item.symbol}
               chainLabel={chainName(tokenChainId(item))}
-              logoUrl={tokenLogoURL(item)}
+              logoUrls={tokenLogoURLs(item)}
               balance={formatBalance(tokenBalanceDouble(item))}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
               onPress={() => handleSelectToken(item)}
@@ -332,7 +332,7 @@ export default function SendScreen() {
   const renderEnterDetails = () => {
     if (!selectedToken) return null;
     const balance = tokenBalanceDouble(selectedToken);
-    const logo = tokenLogoURL(selectedToken);
+    const logos = tokenLogoURLs(selectedToken);
 
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
@@ -342,7 +342,7 @@ export default function SendScreen() {
           {/* Selected token info */}
           <VelaCard style={styles.selectedCard}>
             <View style={styles.selectedRow}>
-              <TokenLogo symbol={selectedToken.symbol} logoUrl={logo} size={40} />
+              <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} size={40} />
               <View style={styles.selectedInfo}>
                 <Text style={styles.selectedName}>{selectedToken.name}</Text>
                 <Text style={styles.selectedBalance}>

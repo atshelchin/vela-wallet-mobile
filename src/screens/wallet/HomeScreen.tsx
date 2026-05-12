@@ -5,16 +5,21 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { AppModal } from '@/components/ui/AppModal';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
-import { chainName } from '@/models/network';
+import { chainName, getAllNetworksSync } from '@/models/network';
+import type { Network } from '@/models/network';
 import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
+import { saveNetworkConfig } from '@/services/storage';
+import { refreshPool } from '@/services/rpc-pool';
+import { setAccountBalance, getAccountBalances } from '@/services/balance-cache';
+import { ChainLogo } from '@/components/ChainLogo';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
-import { Alert, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -79,6 +84,10 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadInFlightRef = useRef(false);
+  const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
+  const [rpcFixChainId, setRpcFixChainId] = useState<number | null>(null);
+  const [rpcFixUrl, setRpcFixUrl] = useState('');
+  const [rpcFixSaving, setRpcFixSaving] = useState(false);
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -102,8 +111,13 @@ export default function HomeScreen() {
           setTokens(partial);
           setLoading(false);
         },
+        onFailedChains: (ids) => setFailedChainIds(ids),
       });
+      if (result.length > 0) setFailedChainIds(prev => prev); // keep last reported
       setTokens(result);
+      // Cache total USD for this account
+      const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
+      setAccountBalance(address, usd);
     } catch (err) {
       if (!silent) {
         Alert.alert('Error', 'Failed to load token balances.');
@@ -132,7 +146,52 @@ export default function HomeScreen() {
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
+  // --- RPC fix modal helpers ---
+  const failedNetworks = failedChainIds
+    .map(id => getAllNetworksSync().find(n => n.chainId === id))
+    .filter((n): n is Network => !!n);
+
+  const openRpcFix = (chainId: number) => {
+    const net = getAllNetworksSync().find(n => n.chainId === chainId);
+    setRpcFixChainId(chainId);
+    setRpcFixUrl(net?.rpcURL ?? '');
+  };
+
+  const handleRpcFixSave = async () => {
+    if (!rpcFixChainId || !rpcFixUrl.trim()) return;
+    setRpcFixSaving(true);
+    try {
+      const net = getAllNetworksSync().find(n => n.chainId === rpcFixChainId);
+      await saveNetworkConfig({
+        chainId: rpcFixChainId,
+        rpcURL: rpcFixUrl.trim(),
+        explorerURL: net?.explorerURL ?? '',
+        bundlerURL: net?.bundlerURL ?? '',
+      });
+      await refreshPool(rpcFixChainId);
+      setFailedChainIds(prev => prev.filter(id => id !== rpcFixChainId));
+      setRpcFixChainId(null);
+      loadTokens(true, true);
+    } catch {
+      Alert.alert('Error', 'Failed to save RPC URL.');
+    } finally {
+      setRpcFixSaving(false);
+    }
+  };
+
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
+
+  const openAccountSwitcher = useCallback(async () => {
+    // Update active account's cache with live data before opening
+    if (address) setAccountBalance(address, totalUsd);
+    const addrs = state.accounts.map(a => a.address);
+    const balances = await getAccountBalances(addrs);
+    // Also set the live balance for current account in case cache was stale
+    if (address) balances.set(address, totalUsd);
+    setCachedBalances(balances);
+    setShowAccountSwitcher(true);
+  }, [address, totalUsd, state.accounts]);
   const [tokenSearch, setTokenSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
 
@@ -168,7 +227,7 @@ export default function HomeScreen() {
         <View style={styles.accountChipWrap}>
           <Pressable
             style={styles.accountChip}
-            onPress={state.accounts.length > 1 ? () => setShowAccountSwitcher(true) : copyAddress}
+            onPress={state.accounts.length > 1 ? openAccountSwitcher : copyAddress}
             onLongPress={copyAddress}
           >
             <View style={styles.accountAvatar}>
@@ -255,6 +314,33 @@ export default function HomeScreen() {
           />
         </View>
       )}
+
+      {/* RPC failure banner */}
+      {failedNetworks.length > 0 && (
+        <Animated.View entering={fadeInDown(0, 300)} style={styles.rpcBanner}>
+          <AlertTriangle size={14} color={'#C07A0A'} strokeWidth={2.5} />
+          <View style={styles.rpcBannerContent}>
+            <Text style={styles.rpcBannerText}>
+              {failedNetworks.length === 1
+                ? `${failedNetworks[0].displayName} RPC unavailable`
+                : `${failedNetworks.length} networks RPC unavailable`}
+            </Text>
+            <View style={styles.rpcBannerChips}>
+              {failedNetworks.map(net => (
+                <Pressable
+                  key={net.chainId}
+                  style={styles.rpcBannerChip}
+                  onPress={() => openRpcFix(net.chainId)}
+                >
+                  <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />
+                  <Text style={styles.rpcBannerChipText}>{net.displayName}</Text>
+                  <Text style={styles.rpcBannerFixLink}>Fix</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 
@@ -315,14 +401,30 @@ export default function HomeScreen() {
       <AppModal visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)}>
         <View style={styles.switcherContainer}>
           <View style={styles.switcherHeader}>
-            <Text style={styles.switcherTitle}>Switch Account</Text>
+            <View>
+              <Text style={styles.switcherTitle}>Switch Account</Text>
+              {cachedBalances.size > 0 && (
+                <Text style={styles.switcherTotal}>
+                  Total {formatUsd([...cachedBalances.values()].reduce((s, v) => s + v, 0))}
+                </Text>
+              )}
+            </View>
             <Pressable onPress={() => setShowAccountSwitcher(false)} hitSlop={8}>
               <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
           </View>
           <ScrollView style={styles.switcherScroll} contentContainerStyle={styles.switcherScrollContent}>
-            {state.accounts.map((account, index) => {
+            {state.accounts
+              .map((account, index) => ({ account, index }))
+              .sort((a, b) => {
+                const balA = cachedBalances.get(a.account.address) ?? -1;
+                const balB = cachedBalances.get(b.account.address) ?? -1;
+                if (balB !== balA) return balB - balA;
+                return a.account.name.localeCompare(b.account.name);
+              })
+              .map(({ account, index }) => {
               const isActive = index === state.activeAccountIndex;
+              const bal = cachedBalances.get(account.address);
               return (
                 <Pressable
                   key={account.id}
@@ -340,13 +442,74 @@ export default function HomeScreen() {
                     <Text style={styles.switcherName}>{account.name}</Text>
                     <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
                   </View>
-                  {isActive && <Check size={18} color={color.accent.base} />}
+                  <View style={styles.switcherRight}>
+                    {bal != null && <Text style={styles.switcherBal}>{formatUsd(bal)}</Text>}
+                    {isActive && <Check size={18} color={color.accent.base} />}
+                  </View>
                 </Pressable>
               );
             })}
             <View style={styles.switcherEndLine} />
           </ScrollView>
         </View>
+      </AppModal>
+
+      {/* RPC Fix Modal */}
+      <AppModal visible={rpcFixChainId !== null} onClose={() => setRpcFixChainId(null)}>
+        {rpcFixChainId !== null && (() => {
+          const net = getAllNetworksSync().find(n => n.chainId === rpcFixChainId);
+          return (
+            <View style={styles.rpcFixContainer}>
+              <View style={styles.rpcFixHeader}>
+                <Text style={styles.rpcFixTitle}>Fix RPC</Text>
+                <Pressable onPress={() => setRpcFixChainId(null)} hitSlop={8}>
+                  <X size={22} color={color.fg.base} strokeWidth={2} />
+                </Pressable>
+              </View>
+
+              <View style={styles.rpcFixBody}>
+                <View style={styles.rpcFixChainRow}>
+                  {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />}
+                  <View>
+                    <Text style={styles.rpcFixChainName}>{net?.displayName ?? `Chain ${rpcFixChainId}`}</Text>
+                    <Text style={styles.rpcFixChainSub}>Chain ID: {rpcFixChainId}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.rpcFixWarning}>
+                  <Wifi size={14} color={'#C07A0A'} strokeWidth={2.5} />
+                  <Text style={styles.rpcFixWarningText}>
+                    All RPC endpoints for this network are failing. Enter a working RPC URL to restore connectivity.
+                  </Text>
+                </View>
+
+                <Text style={styles.rpcFixLabel}>RPC URL</Text>
+                <TextInput
+                  style={styles.rpcFixInput}
+                  value={rpcFixUrl}
+                  onChangeText={setRpcFixUrl}
+                  placeholder="https://rpc.example.com"
+                  placeholderTextColor={color.fg.subtle}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                />
+
+                <Pressable
+                  style={[styles.rpcFixBtn, rpcFixSaving && styles.rpcFixBtnDisabled]}
+                  onPress={handleRpcFixSave}
+                  disabled={rpcFixSaving || !rpcFixUrl.trim()}
+                >
+                  {rpcFixSaving ? (
+                    <ActivityIndicator size={16} color={color.fg.inverse} />
+                  ) : (
+                    <Text style={styles.rpcFixBtnText}>Save & Retry</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          );
+        })()}
       </AppModal>
     </ScreenContainer>
   );
@@ -607,6 +770,22 @@ const styles = createStyles(() => ({
     fontFamily: font.mono,
     color: color.fg.subtle,
   },
+  switcherTotal: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.subtle,
+    marginTop: 2,
+  },
+  switcherRight: {
+    marginLeft: 'auto',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  switcherBal: {
+    fontSize: text.sm,
+    ...inter.bold,
+    color: color.fg.base,
+  },
 
   // Empty
   emptyCard: {
@@ -634,5 +813,136 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
     textAlign: 'center',
     lineHeight: 20,
+  },
+
+  // RPC failure banner
+  rpcBanner: {
+    flexDirection: 'row',
+    gap: space.md,
+    padding: space.lg,
+    backgroundColor: '#FFF8F0',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#F0DCC8',
+    marginBottom: space.lg,
+  },
+  rpcBannerContent: {
+    flex: 1,
+    gap: space.sm,
+  },
+  rpcBannerText: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: '#92600A',
+  },
+  rpcBannerChips: {
+    gap: space.sm,
+  },
+  rpcBannerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.xs,
+  },
+  rpcBannerChipText: {
+    flex: 1,
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.base,
+  },
+  rpcBannerFixLink: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.accent.base,
+  },
+
+  // RPC Fix Modal
+  rpcFixContainer: {
+    flex: 1,
+    backgroundColor: color.bg.base,
+  },
+  rpcFixHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space['3xl'],
+    paddingVertical: space.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.base,
+  },
+  rpcFixTitle: {
+    fontSize: text.xl,
+    ...inter.bold,
+    color: color.fg.base,
+  },
+  rpcFixBody: {
+    padding: space['3xl'],
+    gap: space.xl,
+  },
+  rpcFixChainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+  },
+  rpcFixChainName: {
+    fontSize: text.lg,
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  rpcFixChainSub: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.subtle,
+  },
+  rpcFixWarning: {
+    flexDirection: 'row',
+    gap: space.md,
+    padding: space.lg,
+    backgroundColor: '#FFF8F0',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#F0DCC8',
+  },
+  rpcFixWarningText: {
+    flex: 1,
+    fontSize: text.sm,
+    ...inter.regular,
+    color: '#92600A',
+    lineHeight: 18,
+  },
+  rpcFixLabel: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.base,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rpcFixInput: {
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.base,
+    backgroundColor: color.bg.sunken,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    marginTop: -space.sm,
+  },
+  rpcFixBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.accent.base,
+    borderRadius: radius.lg,
+    paddingVertical: space.lg,
+    ...shadow.sm,
+  },
+  rpcFixBtnDisabled: {
+    opacity: 0.5,
+  },
+  rpcFixBtnText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.inverse,
   },
 }));

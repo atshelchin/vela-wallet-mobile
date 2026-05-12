@@ -13,6 +13,7 @@ interface Props {
   symbol: string;
   chainLabel: string;
   logoUrl?: string | null;
+  logoUrls?: string[];
   balance: string;
   usdValue?: string;
   onPress: () => void;
@@ -21,7 +22,7 @@ interface Props {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function TokenRow({ symbol, chainLabel, logoUrl, balance, usdValue, onPress, index = 0 }: Props) {
+export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, balance, usdValue, onPress, index = 0 }: Props) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -44,7 +45,7 @@ export function TokenRow({ symbol, chainLabel, logoUrl, balance, usdValue, onPre
         onPressOut={handlePressOut}
         style={[styles.container, animatedStyle]}
       >
-        <TokenLogo symbol={symbol} logoUrl={logoUrl} size={40} />
+        <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} size={40} />
         <View style={styles.info}>
           <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
           <Text style={styles.chain}>{chainLabel}</Text>

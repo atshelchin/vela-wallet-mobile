@@ -26,6 +26,7 @@ import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
+import { getAccountBalances } from '@/services/balance-cache';
 import { toHex } from '@/services/hex';
 import Animated, {
   useSharedValue,
@@ -210,19 +211,46 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
 // Account Switcher Modal
 // ---------------------------------------------------------------------------
 
+function formatUsd(value: number): string {
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
   const { state, dispatch } = useWallet();
   const router = useRouter();
+  const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!visible) return;
+    getAccountBalances(state.accounts.map(a => a.address)).then(setCachedBalances);
+  }, [visible, state.accounts]);
+
+  const allTotal = [...cachedBalances.values()].reduce((s, v) => s + v, 0);
+
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>Accounts</Text>
+          <View>
+            <Text style={s.modalTitle}>Accounts</Text>
+            {cachedBalances.size > 0 && (
+              <Text style={s.accountTotalLabel}>Total {formatUsd(allTotal)}</Text>
+            )}
+          </View>
           <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent}>
-          {state.accounts.map((account, index) => {
+          {state.accounts
+            .map((account, index) => ({ account, index }))
+            .sort((a, b) => {
+              const balA = cachedBalances.get(a.account.address) ?? -1;
+              const balB = cachedBalances.get(b.account.address) ?? -1;
+              if (balB !== balA) return balB - balA;
+              return a.account.name.localeCompare(b.account.name);
+            })
+            .map(({ account, index }) => {
             const isActive = index === state.activeAccountIndex;
+            const bal = cachedBalances.get(account.address);
             return (
               <Pressable key={account.id} style={[s.accountItem, isActive && s.accountItemActive]}
                 onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onClose(); }}>
@@ -233,7 +261,10 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
                   <Text style={s.accountNameModal}>{account.name}</Text>
                   <Text style={s.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
-                {isActive && <Check size={18} color={color.accent.base} />}
+                <View style={s.accountRight}>
+                  {bal != null && <Text style={s.accountBal}>{formatUsd(bal)}</Text>}
+                  {isActive && <Check size={18} color={color.accent.base} />}
+                </View>
               </Pressable>
             );
           })}
@@ -562,7 +593,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
         isL2: false,
         rpcURL: compatResult.bestRpcUrl ?? chainInfo.rpcUrl, // Use the fastest RPC
         explorerURL: chainInfo.explorerUrl,
-        bundlerURL: '',
+        bundlerURL: `https://bundler.getvela.app/${chainInfo.chainId}`,
         nativeSymbol: chainInfo.nativeCurrency.symbol,
         addedAt: new Date().toISOString(),
       };
@@ -1000,6 +1031,9 @@ const styleFactory = () => ({
   accountInfo: { flex: 1, gap: 2 },
   accountNameModal: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   accountAddress: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.subtle },
+  accountTotalLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, marginTop: 2 },
+  accountRight: { marginLeft: 'auto' as const, alignItems: 'flex-end' as const, gap: 4 },
+  accountBal: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
   accountActions: { marginTop: space.xl, gap: space.lg },
 
   // Network Editor

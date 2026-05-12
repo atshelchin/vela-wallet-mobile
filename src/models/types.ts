@@ -2,6 +2,7 @@
  * Core data models shared across the app.
  * Matches iOS WalletState.swift, WalletAPIService.swift models.
  */
+import { checksumAddress } from '@/services/eth-crypto';
 
 // MARK: - Account
 
@@ -86,15 +87,29 @@ export function tokenChainId(t: APIToken): number {
 }
 
 export function tokenLogoURL(t: APIToken): string | null {
-  if (t.logo && t.logo.length > 0) return t.logo;
+  return tokenLogoURLs(t)[0] ?? null;
+}
+
+/**
+ * Return candidate logo URLs in priority order.
+ * For ERC-20 tokens we try checksummed address first, then lowercase,
+ * so we tolerate inconsistent casing on the data server.
+ */
+export function tokenLogoURLs(t: APIToken): string[] {
+  if (t.logo && t.logo.length > 0) return [t.logo];
   const cid = tokenChainId(t);
   if (isNativeToken(t)) {
-    return `https://ethereum-data.awesometools.dev/chainlogos/eip155-${cid}.png`;
+    return [`https://ethereum-data.awesometools.dev/chainlogos/eip155-${cid}.png`];
   }
   if (t.tokenAddress) {
-    return `https://ethereum-data.awesometools.dev/assets/eip155-${cid}/${t.tokenAddress}/logo.png`;
+    const base = `https://ethereum-data.awesometools.dev/assets/eip155-${cid}`;
+    const cs = checksumAddress(t.tokenAddress);
+    const lc = t.tokenAddress.toLowerCase();
+    const urls = [`${base}/${cs}/logo.png`];
+    if (lc !== cs) urls.push(`${base}/${lc}/logo.png`);
+    return urls;
   }
-  return null;
+  return [];
 }
 
 // MARK: - API NFT

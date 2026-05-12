@@ -21,7 +21,7 @@ export default function TokenDetailScreen() {
     network: string;
     balance: string;
     decimals: string;
-    logo: string;
+    logos: string;
     tokenAddress: string;
     priceUsd: string;
     chainName: string;
@@ -32,7 +32,7 @@ export default function TokenDetailScreen() {
   const balance = parseFloat(params.balance ?? '0');
   const priceUsd = parseFloat(params.priceUsd ?? '0');
   const usdValue = balance * priceUsd;
-  const logoUrl = params.logo || null;
+  const logoUrls: string[] = (() => { try { return JSON.parse(params.logos ?? '[]'); } catch { return []; } })();
   const contractAddress = params.tokenAddress || null;
   const network = params.network ?? '';
   const decimals = parseInt(params.decimals ?? '18', 10);
@@ -84,7 +84,7 @@ export default function TokenDetailScreen() {
 
         {/* Token header */}
         <Animated.View style={styles.tokenHeader} entering={fadeIn(0, 400)}>
-          <TokenLogo symbol={symbol} logoUrl={logoUrl} size={72} />
+          <TokenLogo symbol={symbol} logoUrls={logoUrls} size={72} />
           <Text style={styles.tokenName}>{tokenName}</Text>
           <View style={styles.chainBadge}>
             <Text style={styles.chainBadgeText}>{chain}</Text>
