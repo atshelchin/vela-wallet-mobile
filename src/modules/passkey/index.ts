@@ -42,13 +42,13 @@ export function getRelyingPartyId(): string {
     if (hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname === '127.0.0.1') {
       return hostname;
     }
-    // Only extract registrable domain for *.getvela.app subdomains.
-    // Other deployment hosts (e.g. pages.dev, github.io) use the
-    // native rpId so passkeys stay consistent across environments.
-    if (hostname.endsWith('.' + RELYING_PARTY_NATIVE)) {
+    // getvela.app or *.getvela.app — use getvela.app
+    if (hostname === RELYING_PARTY_NATIVE || hostname.endsWith('.' + RELYING_PARTY_NATIVE)) {
       return RELYING_PARTY_NATIVE;
     }
-    return hostname === RELYING_PARTY_NATIVE ? hostname : RELYING_PARTY_NATIVE;
+    // Other domains (e.g. pages.dev preview deploys) — use hostname as-is.
+    // Install the WebAuthn proxy extension to use getvela.app passkeys.
+    return hostname;
   }
   return RELYING_PARTY_NATIVE;
 }

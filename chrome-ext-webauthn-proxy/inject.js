@@ -108,10 +108,11 @@
   const origGet = navigator.credentials.get.bind(navigator.credentials);
 
   function shouldProxy(rpId) {
-    // Proxy when rpId is localhost, missing, OR already getvela.app
-    // (the app now always sends getvela.app, but the page origin is localhost,
-    // so the browser would reject it without the extension's help).
-    return !rpId || rpId === 'localhost' || rpId === '127.0.0.1' || rpId === PROXY_RP_ID;
+    // Proxy when the rpId doesn't match the current domain (browser would reject it)
+    // or when it's a non-production domain that needs remapping to getvela.app.
+    if (!rpId || rpId === PROXY_RP_ID) return true;
+    var host = location.hostname;
+    return host !== rpId && !host.endsWith('.' + rpId);
   }
 
   navigator.credentials.create = function (opts) {

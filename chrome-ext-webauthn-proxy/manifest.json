@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Vela WebAuthn Dev Proxy",
   "version": "1.0.0",
-  "description": "Proxy WebAuthn calls on localhost to use getvela.app rpId",
+  "description": "Proxy WebAuthn calls to use getvela.app rpId on any dev/preview domain",
   "host_permissions": [
     "*://getvela.app/*"
   ],
@@ -15,7 +15,19 @@
         "http://localhost/*",
         "http://localhost:*/*",
         "http://127.0.0.1/*",
-        "http://127.0.0.1:*/*"
+        "http://127.0.0.1:*/*",
+        "https://*.pages.dev/*",
+        "https://*.workers.dev/*",
+        "https://*.github.io/*",
+        "https://*.vercel.app/*",
+        "https://*.netlify.app/*",
+        "https://*.deno.dev/*",
+        "https://*.fly.dev/*",
+        "https://*.railway.app/*",
+        "https://*.render.com/*",
+        "https://*.surge.sh/*",
+        "https://*.ngrok-free.app/*",
+        "https://*.trycloudflare.com/*"
       ],
       "js": ["inject.js"],
       "run_at": "document_start",
@@ -26,7 +38,19 @@
         "http://localhost/*",
         "http://localhost:*/*",
         "http://127.0.0.1/*",
-        "http://127.0.0.1:*/*"
+        "http://127.0.0.1:*/*",
+        "https://*.pages.dev/*",
+        "https://*.workers.dev/*",
+        "https://*.github.io/*",
+        "https://*.vercel.app/*",
+        "https://*.netlify.app/*",
+        "https://*.deno.dev/*",
+        "https://*.fly.dev/*",
+        "https://*.railway.app/*",
+        "https://*.render.com/*",
+        "https://*.surge.sh/*",
+        "https://*.ngrok-free.app/*",
+        "https://*.trycloudflare.com/*"
       ],
       "js": ["bridge.js"],
       "run_at": "document_start"
