@@ -30,7 +30,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader, ArrowUpDown, Search } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -141,6 +141,7 @@ export default function SendScreen() {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [tokenSearch, setTokenSearch] = useState('');
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
@@ -155,6 +156,7 @@ export default function SendScreen() {
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
 
   // Prefetch account credential + webauthn module while user reviews confirm screen
+  const amountInputRef = useRef<TextInput>(null);
   const prefetchedAccount = useRef<{ publicKeyHex: string } | null>(null);
   const webauthnModuleRef = useRef<typeof import('@/services/webauthn-verify') | null>(null);
 
@@ -349,6 +351,8 @@ export default function SendScreen() {
 
   const handleMaxAmount = async () => {
     if (!selectedToken) return;
+    // Max always fills in token amount (not USD)
+    if (inputInUsd) setInputInUsd(false);
 
     // For native tokens (ETH, BNB, etc.), reserve gas for the EntryPoint prefund.
     // The Safe must hold: transferAmount + prefund, so max = balance - prefund.
@@ -541,18 +545,37 @@ export default function SendScreen() {
   };
 
   // Step 1: Select Token
+  const filteredTokens = tokenSearch
+    ? tokens.filter((t) => {
+        const q = tokenSearch.toLowerCase();
+        return t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || t.network.toLowerCase().includes(q);
+      })
+    : tokens;
+
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
       <Text style={styles.stepTitle}>Select Token</Text>
+      <View style={styles.searchWrap}>
+        <Search size={16} color={color.fg.subtle} strokeWidth={2} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search tokens..."
+          placeholderTextColor={color.fg.subtle}
+          value={tokenSearch}
+          onChangeText={setTokenSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
       {loading ? (
         <Text style={styles.loadingText}>Loading tokens...</Text>
-      ) : tokens.length === 0 ? (
+      ) : filteredTokens.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No tokens with balance</Text>
+          <Text style={styles.emptyText}>{tokenSearch ? 'No matching tokens' : 'No tokens with balance'}</Text>
         </View>
       ) : (
         <FlatList
-          data={tokens}
+          data={filteredTokens}
           keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
           renderItem={({ item, index }) => (
             <TokenRow
@@ -561,13 +584,14 @@ export default function SendScreen() {
               logoUrls={tokenLogoURLs(item)}
               balance={formatBalance(tokenBalanceDouble(item))}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-              onPress={() => handleSelectToken(item)}
+              onPress={() => { handleSelectToken(item); setTokenSearch(''); }}
               index={index}
             />
           )}
           initialNumToRender={10}
           windowSize={5}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         />
       )}
     </Animated.View>
@@ -585,8 +609,9 @@ export default function SendScreen() {
         <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>Send {selectedToken.symbol}</Text>
 
-          {/* Hero card — matches token detail design */}
-          <VelaCard elevated style={styles.heroCard}>
+          {/* Hero card — tap to switch token */}
+          <Pressable onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
+          <VelaCard style={styles.heroCard}>
             <View style={styles.heroRow}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} size={44} />
               <View style={styles.heroIdentity}>
@@ -605,11 +630,13 @@ export default function SendScreen() {
               </View>
             </View>
           </VelaCard>
+          </Pressable>
 
           {/* Amount — large display with inline unit */}
-          <View style={styles.amountWrap}>
+          <Pressable style={styles.amountWrap} onPress={() => amountInputRef.current?.focus()}>
             <View style={styles.amountTopRow}>
               <TextInput
+                ref={amountInputRef}
                 style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
                 placeholder="0"
                 placeholderTextColor={color.fg.subtle}
@@ -620,11 +647,18 @@ export default function SendScreen() {
                   if (sanitized !== null) setAmount(sanitized);
                 }}
                 keyboardType="decimal-pad"
+                selectionColor={color.fg.muted}
               />
-              {/* Unit suffix — static label (not a toggle) */}
-              <Text style={styles.unitLabel}>{inputInUsd ? 'USD' : selectedToken.symbol}</Text>
-              {/* Max button — only visible when amount is empty */}
+              {amount ? (
+                /* Unit suffix — faded label next to the number */
+                <Text style={[styles.unitLabel, { fontSize: Math.max(amountFontSize(amount) * 0.7, 16) }]}>
+                  {inputInUsd ? 'USD' : selectedToken.symbol}
+                </Text>
+              ) : null}
+              {/* Spacer pushes Max to the right */}
+              <View style={{ flex: 1 }} />
               {!amount && (
+                /* Max button — right-aligned when amount is empty */
                 <Pressable onPress={handleMaxAmount} hitSlop={8} style={styles.maxBtn}>
                   <Text style={styles.maxBtnText}>Max</Text>
                 </Pressable>
@@ -647,7 +681,7 @@ export default function SendScreen() {
                 hitSlop={8}
                 style={styles.conversionRow}
               >
-                <Text style={styles.conversionSwap}>↕</Text>
+                <ArrowUpDown size={14} color={color.fg.muted} strokeWidth={2.5} />
                 <Text style={styles.conversionText}>
                   {amount
                     ? inputInUsd
@@ -659,10 +693,10 @@ export default function SendScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            {amountWarning ? (
-              <Text style={styles.amountWarning}>{amountWarning}</Text>
-            ) : null}
-          </View>
+          </Pressable>
+          {amountWarning ? (
+            <Text style={styles.amountWarning}>{amountWarning}</Text>
+          ) : null}
 
           {/* Recipient */}
           <View style={styles.fieldLabelRow}>
@@ -681,6 +715,8 @@ export default function SendScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               multiline
+              blurOnSubmit
+              returnKeyType="done"
             />
             {recentRecipients.length > 0 && (
               <View style={styles.inputIcons}>
@@ -994,6 +1030,28 @@ const styles = createStyles(() => ({
     color: color.fg.muted,
   },
 
+  // Search
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    marginBottom: space.xl,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.base,
+    padding: 0,
+    outlineStyle: 'none',
+  } as any,
+
   // Hero card (matches TokenDetailScreen)
   heroCard: {
     padding: space['2xl'],
@@ -1068,7 +1126,8 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.base,
     maxHeight: 100,
-  },
+    outlineStyle: 'none',
+  } as any,
   inputIcons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1117,7 +1176,12 @@ const styles = createStyles(() => ({
   },
 
   amountWrap: {
-    paddingVertical: space.xl,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
     marginBottom: space.lg,
   },
   amountTopRow: {
@@ -1125,52 +1189,50 @@ const styles = createStyles(() => ({
     alignItems: 'center',
   },
   amountInput: {
-    flex: 1,
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
     padding: 0,
-  },
+    // Remove focus outline (web) and underline (Android)
+    outlineStyle: 'none',
+  } as any,
   unitLabel: {
-    fontSize: text['3xl'],
-    ...inter.regular,
-    color: color.fg.subtle,
-    opacity: 0.35,
+    ...inter.medium,
+    color: color.fg.muted,
+    opacity: 0.4,
     marginLeft: space.sm,
   },
   maxBtn: {
     paddingVertical: space.xs,
-    paddingHorizontal: space.md,
-    backgroundColor: color.accent.soft,
-    borderRadius: radius.md,
-    marginLeft: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: color.border.base,
   },
   maxBtnText: {
     fontSize: text.sm,
-    ...inter.bold,
-    color: color.accent.base,
+    ...inter.semibold,
+    color: color.fg.muted,
   },
   conversionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs,
-    marginTop: space.sm,
-  },
-  conversionSwap: {
-    fontSize: text.base,
-    color: color.accent.base,
-    ...inter.bold,
+    gap: space.sm,
+    marginTop: space.md,
   },
   conversionText: {
     fontSize: text.sm,
     ...inter.medium,
-    color: color.accent.base,
+    color: color.fg.muted,
   },
   amountWarning: {
-    fontSize: text.xs,
+    fontSize: text.sm,
     ...inter.medium,
     color: color.error.base,
-    marginTop: space.xs,
+    marginTop: space.sm,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xs,
   },
   continueBtn: {
     marginTop: space.lg,
