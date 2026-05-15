@@ -909,11 +909,12 @@ const styles = createStyles(() => ({
   },
   searchInput: {
     flex: 1,
-    fontSize: text.base,
+    fontSize: 16, // ≥16px prevents iOS Safari auto-zoom on focus
     ...inter.regular,
     color: color.fg.base,
     paddingVertical: space.xs,
-  },
+    outlineStyle: 'none',
+  } as any,
 
   // Account Switcher Modal
   switcherContainer: {
