@@ -450,7 +450,20 @@ export async function poolRpcCall(
 ): Promise<RPCResponse> {
   await ensurePool(chainId);
 
-  const endpoints = getSortedEndpoints(chainId, 'rpc');
+  let endpoints = getSortedEndpoints(chainId, 'rpc');
+
+  // If all endpoints are banned, clear bans and rebuild pool to allow recovery
+  if (endpoints.length === 0) {
+    console.warn(`[RPC] All endpoints banned for chain ${chainId} — clearing bans and retrying`);
+    const pool = rpcPools.get(chainId) ?? [];
+    for (const ep of pool) {
+      banMap.delete(ep.url);
+      ep.banned = false;
+      ep.consecutiveFailures = 0;
+    }
+    saveBans();
+    endpoints = getSortedEndpoints(chainId, 'rpc');
+  }
   console.log(`[RPC] ${method} chain=${chainId} endpoints=${endpoints.length} [${endpoints.map(e => `${e.source}:${shorten(e.url)}`).join(', ')}]`);
 
   for (const ep of endpoints) {
@@ -509,7 +522,20 @@ export async function poolBundlerCall(
 ): Promise<RPCResponse> {
   await ensurePool(chainId);
 
-  const endpoints = getSortedEndpoints(chainId, 'bundler');
+  let endpoints = getSortedEndpoints(chainId, 'bundler');
+
+  // If all endpoints are banned, clear bans and rebuild pool to allow recovery
+  if (endpoints.length === 0) {
+    console.warn(`[Bundler] All endpoints banned for chain ${chainId} — clearing bans and retrying`);
+    const pool = bundlerPools.get(chainId) ?? [];
+    for (const ep of pool) {
+      banMap.delete(ep.url);
+      ep.banned = false;
+      ep.consecutiveFailures = 0;
+    }
+    saveBans();
+    endpoints = getSortedEndpoints(chainId, 'bundler');
+  }
   console.log(`[Bundler] ${method} chain=${chainId} endpoints=${endpoints.length} [${endpoints.map(e => `${e.source}:${shorten(e.url)}`).join(', ')}]`);
 
   // Get the chain's best RPC URL — passed via X-Rpc-Url so the bundler can reach the chain
