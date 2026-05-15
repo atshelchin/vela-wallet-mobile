@@ -16,6 +16,7 @@ import {
   getColorSchemePreference,
   resolveColorScheme,
   applyColorScheme,
+  applyWebThemeColor,
   ColorSchemeProvider,
   useColorSchemePreference,
 } from '@/constants/color-scheme';
@@ -56,6 +57,7 @@ export default function RootLayout() {
         const systemScheme = Appearance.getColorScheme();
         const resolved = resolveColorScheme(pref, systemScheme);
         rebuildColors(resolved === 'dark');
+        applyWebThemeColor(resolved);
       }),
       refreshCustomNetworks(),
     ]).then(() => setReady(true));

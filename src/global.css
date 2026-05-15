@@ -24,6 +24,18 @@ input, textarea, [contenteditable] {
   --font-serif: Georgia, 'Times New Roman', serif;
 }
 
+/* Mobile web: match safe-area bleed to app background (overridden by JS on theme change) */
+@media (max-width: 499px) {
+  html, body {
+    background-color: #FAFAF8;
+  }
+}
+@media (max-width: 499px) and (prefers-color-scheme: dark) {
+  html, body {
+    background-color: #141412;
+  }
+}
+
 /* Desktop web: constrain to phone dimensions */
 @media (min-width: 500px) {
   html, body {

@@ -58,15 +58,20 @@ export function applyColorScheme(pref: ColorSchemePreference): void {
 const WEB_THEME_COLORS = { light: '#FAFAF8', dark: '#141412' };
 
 /** Update Safari address bar / status bar tint on web. */
-function applyWebThemeColor(resolved: 'light' | 'dark'): void {
+export function applyWebThemeColor(resolved: 'light' | 'dark'): void {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return;
   const hex = WEB_THEME_COLORS[resolved];
-  // Remove media-specific tags and set a single explicit color
+  // 1. theme-color meta — controls Safari toolbar tint
   document.querySelectorAll('meta[name="theme-color"]').forEach((el) => el.remove());
   const meta = document.createElement('meta');
   meta.name = 'theme-color';
   meta.content = hex;
   document.head.appendChild(meta);
+  // 2. body/html background — Safari uses this for safe-area bleed (mobile only)
+  if (window.innerWidth < 500) {
+    document.documentElement.style.backgroundColor = hex;
+    document.body.style.backgroundColor = hex;
+  }
 }
 
 // ---------------------------------------------------------------------------
