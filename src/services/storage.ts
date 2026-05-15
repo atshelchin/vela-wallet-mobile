@@ -226,16 +226,32 @@ export async function removeCustomNetwork(id: string): Promise<void> {
 // Service Endpoints
 // ---------------------------------------------------------------------------
 
+/** In-memory cache — initialised on first `loadServiceEndpoints()` call. */
+let _endpointsCache: ServiceEndpoints = { ...DEFAULT_SERVICE_ENDPOINTS };
+
 export async function loadServiceEndpoints(): Promise<ServiceEndpoints> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.serviceEndpoints);
-    if (raw) return { ...DEFAULT_SERVICE_ENDPOINTS, ...JSON.parse(raw) };
+    if (raw) {
+      _endpointsCache = { ...DEFAULT_SERVICE_ENDPOINTS, ...JSON.parse(raw) };
+      return _endpointsCache;
+    }
   } catch {}
   return { ...DEFAULT_SERVICE_ENDPOINTS };
 }
 
 export async function saveServiceEndpoints(endpoints: ServiceEndpoints): Promise<void> {
+  _endpointsCache = { ...endpoints };
   await AsyncStorage.setItem(KEYS.serviceEndpoints, JSON.stringify(endpoints));
+}
+
+/**
+ * Synchronous getter for the ethereum-data base URL.
+ * Returns the user-configured value if available, otherwise the default.
+ * The cache is populated by `loadServiceEndpoints()` which runs at app startup.
+ */
+export function getEthereumDataURL(): string {
+  return _endpointsCache.ethereumDataURL || DEFAULT_SERVICE_ENDPOINTS.ethereumDataURL;
 }
 
 // ---------------------------------------------------------------------------

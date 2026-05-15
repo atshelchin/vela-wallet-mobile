@@ -436,6 +436,67 @@ async function tryEndpoint(
 }
 
 // ---------------------------------------------------------------------------
+// Fastest-RPC picker (for X-Rpc-Url header sent to bundler)
+// ---------------------------------------------------------------------------
+
+/** Ping timeout per endpoint — short since we race all in parallel. */
+const PING_TIMEOUT_MS = 3_000;
+
+/** Cache the winning URL per chain for 60s to avoid pinging every bundler call. */
+const fastestRpcCache = new Map<number, { url: string; ts: number }>();
+const FASTEST_RPC_TTL_MS = 3_600_000; // 1 hour
+
+/**
+ * Race all known RPC endpoints for `chainId` with a lightweight eth_chainId
+ * call and return the URL that responds first / lowest latency.
+ * Falls back to the score-sorted first endpoint if all pings fail.
+ */
+async function pickFastestRpcUrl(chainId: number): Promise<string | undefined> {
+  const rpcEndpoints = getSortedEndpoints(chainId, 'rpc');
+  if (rpcEndpoints.length === 0) return undefined;
+  if (rpcEndpoints.length === 1) return rpcEndpoints[0].url;
+
+  // Return cached winner if still fresh
+  const cached = fastestRpcCache.get(chainId);
+  if (cached && Date.now() - cached.ts < FASTEST_RPC_TTL_MS) return cached.url;
+
+  const results: { url: string; ms: number }[] = [];
+
+  await Promise.allSettled(
+    rpcEndpoints.map(async (ep) => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), PING_TIMEOUT_MS);
+      const t0 = Date.now();
+      try {
+        const res = await fetch(ep.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+          signal: ac.signal,
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json?.result) return;
+        results.push({ url: ep.url, ms: Date.now() - t0 });
+      } catch { /* timeout or network error — skip */ } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+
+  if (results.length === 0) {
+    // All pings failed — fall back to score-sorted first
+    return rpcEndpoints[0].url;
+  }
+
+  results.sort((a, b) => a.ms - b.ms);
+  const winner = results[0];
+  console.log(`[RPC] Fastest for chain ${chainId}: ${shorten(winner.url)} (${winner.ms}ms) out of ${results.length}/${rpcEndpoints.length}`);
+  fastestRpcCache.set(chainId, { url: winner.url, ts: Date.now() });
+  return winner.url;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -538,9 +599,8 @@ export async function poolBundlerCall(
   }
   console.log(`[Bundler] ${method} chain=${chainId} endpoints=${endpoints.length} [${endpoints.map(e => `${e.source}:${shorten(e.url)}`).join(', ')}]`);
 
-  // Get the chain's best RPC URL — passed via X-Rpc-Url so the bundler can reach the chain
-  const rpcEndpoints = getSortedEndpoints(chainId, 'rpc');
-  const chainRpcUrl = rpcEndpoints[0]?.url;
+  // Pick the lowest-latency RPC URL — passed via X-Rpc-Url so the bundler can reach the chain
+  const chainRpcUrl = await pickFastestRpcUrl(chainId);
   const extraHeaders = chainRpcUrl ? { 'X-Rpc-Url': chainRpcUrl } : undefined;
 
   for (const ep of endpoints) {

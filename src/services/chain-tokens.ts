@@ -5,7 +5,7 @@
  * Data source: https://ethereum-data.awesometools.dev/chains/eip155-{chainId}.json
  */
 
-const BASE_URL = 'https://ethereum-data.awesometools.dev';
+import { getEthereumDataURL } from './storage';
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 // ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ export async function fetchChainTokens(chainId: number): Promise<ChainTokenData 
   if (cached && Date.now() - cached.at < CACHE_TTL) return cached.data;
 
   try {
-    const res = await fetch(`${BASE_URL}/chains/eip155-${chainId}.json`);
+    const res = await fetch(`${getEthereumDataURL()}/chains/eip155-${chainId}.json`);
     if (!res.ok) return null;
 
     const raw = await res.json();

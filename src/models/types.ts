@@ -3,6 +3,7 @@
  * Matches iOS WalletState.swift, WalletAPIService.swift models.
  */
 import { checksumAddress } from '@/services/eth-crypto';
+import { getEthereumDataURL } from '@/services/storage';
 
 // MARK: - Account
 
@@ -99,10 +100,10 @@ export function tokenLogoURLs(t: APIToken): string[] {
   if (t.logo && t.logo.length > 0) return [t.logo];
   const cid = tokenChainId(t);
   if (isNativeToken(t)) {
-    return [`https://ethereum-data.awesometools.dev/chainlogos/eip155-${cid}.png`];
+    return [`${getEthereumDataURL()}/chainlogos/eip155-${cid}.png`];
   }
   if (t.tokenAddress) {
-    const base = `https://ethereum-data.awesometools.dev/assets/eip155-${cid}`;
+    const base = `${getEthereumDataURL()}/assets/eip155-${cid}`;
     const cs = checksumAddress(t.tokenAddress);
     const lc = t.tokenAddress.toLowerCase();
     const urls = [`${base}/${cs}/logo.png`];

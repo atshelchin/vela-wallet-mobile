@@ -7,7 +7,7 @@
  * - Search index: /index/fuse-chains.json (Fuse.js compatible)
  */
 
-const BASE_URL = 'https://ethereum-data.awesometools.dev';
+import { getEthereumDataURL } from './storage';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,7 +44,7 @@ export interface ChainSearchResult {
 
 export async function fetchChainInfo(chainId: number): Promise<ChainInfo | null> {
   try {
-    const res = await fetch(`${BASE_URL}/chains/eip155-${chainId}.json`);
+    const res = await fetch(`${getEthereumDataURL()}/chains/eip155-${chainId}.json`);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -67,7 +67,7 @@ function parseChainData(data: any, chainId: number): ChainInfo {
     rpcUrl: extractRpcUrl(data),
     rpcUrls: extractAllRpcUrls(data),
     explorerUrl: extractExplorerUrl(data),
-    logoURL: `${BASE_URL}/chainlogos/eip155-${chainId}.png`,
+    logoURL: `${getEthereumDataURL()}/chainlogos/eip155-${chainId}.png`,
     isTestnet: data.testnet === true,
   };
 }
@@ -87,7 +87,7 @@ async function loadSearchIndex(): Promise<ChainSearchResult[]> {
   }
 
   try {
-    const res = await fetch(`${BASE_URL}/index/fuse-chains.json`);
+    const res = await fetch(`${getEthereumDataURL()}/index/fuse-chains.json`);
     if (!res.ok) return _searchCache ?? [];
 
     const json = await res.json();
