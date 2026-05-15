@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { copyToClipboard } from '@/services/platform';
+import { useWallet } from '@/models/wallet-state';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
+import { BarChart } from '@/components/ui/BarChart';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
+import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
 import { Copy, Check, ArrowLeft } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
@@ -53,7 +56,26 @@ export default function TokenDetailScreen() {
   const formatUsd = (value: number) =>
     '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const { activeAccount, state } = useWallet();
+  const walletAddress = activeAccount?.address ?? state.address;
   const [copied, setCopied] = useState(false);
+  const [historyData, setHistoryData] = useState<BalancePoint[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    setHistoryLoading(true);
+    fetch7DayHistory({
+      address: walletAddress,
+      chainId,
+      tokenAddress: contractAddress,
+      decimals,
+      currentBalance: balance,
+    })
+      .then(setHistoryData)
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+  }, [walletAddress, chainId, contractAddress, decimals, balance]);
   const copyContract = async () => {
     if (!contractAddress) return;
     await copyToClipboard(contractAddress);
@@ -104,6 +126,22 @@ export default function TokenDetailScreen() {
                 )}
               </View>
             </View>
+          </VelaCard>
+        </Animated.View>
+
+        {/* 7-day balance chart */}
+        <Animated.View entering={fadeInDown(50, 400)}>
+          <VelaCard style={styles.chartCard}>
+            <Text style={styles.chartTitle}>7-Day Balance</Text>
+            {historyLoading ? (
+              <View style={styles.chartLoading}>
+                <ActivityIndicator size="small" color={color.fg.subtle} />
+              </View>
+            ) : historyData.length > 1 ? (
+              <BarChart data={historyData} symbol={symbol} />
+            ) : (
+              <Text style={styles.chartEmpty}>No historical data available</Text>
+            )}
           </VelaCard>
         </Animated.View>
 
@@ -225,6 +263,30 @@ const styles = createStyles(() => ({
   },
 
   // Buttons
+  chartCard: {
+    padding: space.xl,
+    marginBottom: space.lg,
+  },
+  chartTitle: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.muted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  chartLoading: {
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chartEmpty: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center' as const,
+    paddingVertical: space['3xl'],
+  },
+
   buttonRow: {
     flexDirection: 'row',
     gap: space.lg,
