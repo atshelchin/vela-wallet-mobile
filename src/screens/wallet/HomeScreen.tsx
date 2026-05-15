@@ -702,8 +702,12 @@ export default function HomeScreen() {
         <QRScanner
           visible={showScanner}
           onScan={(addr) => {
-            setShowScanner(false);
-            router.push(`/send?prefilledRecipient=${addr}`);
+            if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+              setShowScanner(false);
+              router.push(`/send?prefilledRecipient=${addr}`);
+            } else {
+              showAlert('Invalid QR', 'Please scan a valid Ethereum address (0x...).');
+            }
           }}
           onClose={() => setShowScanner(false)}
         />

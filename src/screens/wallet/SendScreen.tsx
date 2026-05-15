@@ -133,7 +133,8 @@ export default function SendScreen() {
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
 
-  const [step, setStep] = useState<Step>('select-token');
+  const hasPreselection = !!(params.prefilledRecipient || (params.preselectedSymbol && params.preselectedNetwork));
+  const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedToken, setSelectedToken] = useState<APIToken | null>(null);
