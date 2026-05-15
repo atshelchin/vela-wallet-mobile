@@ -45,7 +45,6 @@ export function BarChart({ data, symbol }: Props) {
         {data.map((point, i) => {
           const noData = point.balance < 0;
           const heightPct = noData ? 0 : Math.max((point.balance / maxBalance) * 100, 2);
-          const isToday = i === data.length - 1;
           const isSelected = selected === i;
           return (
             <Pressable key={point.label} style={styles.barCol} onPress={() => setSelected(isSelected ? null : i)}>
@@ -57,13 +56,12 @@ export function BarChart({ data, symbol }: Props) {
                   style={[
                     styles.bar,
                     { height: `${heightPct}%` },
-                    isToday && styles.barToday,
                     isSelected && styles.barSelected,
                   ]}
                 />
                 )}
               </View>
-              <Text style={[styles.label, isToday && styles.labelToday, isSelected && styles.labelSelected]}>{point.label}</Text>
+              <Text style={[styles.label, isSelected && styles.labelSelected]}>{point.label}</Text>
             </Pressable>
           );
         })}
@@ -121,9 +119,6 @@ const styles = createStyles(() => ({
     backgroundColor: color.border.base,
     borderRadius: radius.sm,
   },
-  barToday: {
-    backgroundColor: color.fg.base,
-  },
   barSelected: {
     backgroundColor: color.fg.base,
   },
@@ -138,10 +133,6 @@ const styles = createStyles(() => ({
     ...inter.medium,
     color: color.fg.subtle,
     marginTop: space.lg,
-  },
-  labelToday: {
-    color: color.fg.base,
-    ...inter.bold,
   },
   labelSelected: {
     color: color.fg.base,
