@@ -17,7 +17,7 @@ import { rpcCall } from './rpc-adapter';
 export interface BalancePoint {
   /** Local date string, e.g. "May 14" */
   label: string;
-  /** Balance as a float (human-readable units, not wei) */
+  /** Balance as a float (human-readable units, not wei). -1 = no data available. */
   balance: number;
 }
 
@@ -220,28 +220,30 @@ export async function fetch7DayHistory(params: {
   }
 
   // Query all 7 days in parallel via the archive RPC
-  const queries = midnights.map(async ({ date, targetTs }) => {
-    const block = blockAtTime(chain, targetTs);
-    const blockHex = '0x' + block.toString(16);
-
-    // Verify block timestamp is within ±1 hour of target
-    const blockInfo = await getBlockInfo(chainId, blockHex);
-    if (!blockInfo || Math.abs(blockInfo.timestamp - targetTs) > 3600) return null;
-
-    const balance = await queryBalance(archiveUrl, address, tokenAddress, decimals, blockHex);
+  const queries = midnights.map(async ({ date, targetTs }): Promise<BalancePoint> => {
     const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return balance !== null ? { label, balance } : null;
+    try {
+      const block = blockAtTime(chain, targetTs);
+      const blockHex = '0x' + block.toString(16);
+
+      // Verify block timestamp is within ±1 hour of target
+      const blockInfo = await getBlockInfo(chainId, blockHex);
+      if (!blockInfo || Math.abs(blockInfo.timestamp - targetTs) > 3600) {
+        return { label, balance: -1 };
+      }
+
+      const balance = await queryBalance(archiveUrl, address, tokenAddress, decimals, blockHex);
+      return { label, balance: balance ?? -1 };
+    } catch {
+      return { label, balance: -1 };
+    }
   });
 
-  const results = await Promise.allSettled(queries);
-  const points: BalancePoint[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) points.push(r.value);
-  }
+  const results = await Promise.all(queries);
 
   // Add today
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  points.push({ label: todayLabel, balance: currentBalance });
+  results.push({ label: todayLabel, balance: currentBalance });
 
-  return points;
+  return results;
 }

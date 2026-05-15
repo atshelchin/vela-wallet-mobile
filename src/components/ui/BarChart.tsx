@@ -3,11 +3,11 @@
  * No third-party dependencies — pure RN Views.
  */
 
-import React, { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
-import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
-import type { BalancePoint } from '@/services/balance-history';
+import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
 import { formatBalance } from '@/models/types';
+import type { BalancePoint } from '@/services/balance-history';
+import React, { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 interface Props {
   data: BalancePoint[];
@@ -19,7 +19,8 @@ export function BarChart({ data, symbol }: Props) {
 
   if (data.length === 0) return null;
 
-  const maxBalance = Math.max(...data.map(d => d.balance), 0.0001);
+  const validBalances = data.filter(d => d.balance >= 0).map(d => d.balance);
+  const maxBalance = Math.max(...validBalances, 0.0001);
   const selectedPoint = selected !== null ? data[selected] : null;
 
   return (
@@ -27,10 +28,14 @@ export function BarChart({ data, symbol }: Props) {
       {/* Selected day balance tooltip */}
       <View style={styles.tooltip}>
         {selectedPoint ? (
-          <>
-            <Text style={styles.tooltipBalance}>{formatBalance(selectedPoint.balance)} {symbol}</Text>
-            <Text style={styles.tooltipDate}>{selectedPoint.label}</Text>
-          </>
+          selectedPoint.balance >= 0 ? (
+            <>
+              <Text style={styles.tooltipBalance}>{formatBalance(selectedPoint.balance)} {symbol}</Text>
+              <Text style={styles.tooltipDate}>{selectedPoint.label}</Text>
+            </>
+          ) : (
+            <Text style={styles.tooltipHint}>No data for {selectedPoint.label}</Text>
+          )
         ) : (
           <Text style={styles.tooltipHint}>Tap a bar to see balance</Text>
         )}
@@ -38,12 +43,16 @@ export function BarChart({ data, symbol }: Props) {
 
       <View style={styles.barsRow}>
         {data.map((point, i) => {
-          const heightPct = Math.max((point.balance / maxBalance) * 100, 2);
+          const noData = point.balance < 0;
+          const heightPct = noData ? 0 : Math.max((point.balance / maxBalance) * 100, 2);
           const isToday = i === data.length - 1;
           const isSelected = selected === i;
           return (
             <Pressable key={point.label} style={styles.barCol} onPress={() => setSelected(isSelected ? null : i)}>
               <View style={styles.barWrap}>
+                {noData ? (
+                  <View style={styles.barNoData} />
+                ) : (
                 <View
                   style={[
                     styles.bar,
@@ -52,6 +61,7 @@ export function BarChart({ data, symbol }: Props) {
                     isSelected && styles.barSelected,
                   ]}
                 />
+                )}
               </View>
               <Text style={[styles.label, isToday && styles.labelToday, isSelected && styles.labelSelected]}>{point.label}</Text>
             </Pressable>
@@ -70,7 +80,7 @@ const styles = createStyles(() => ({
   },
   tooltip: {
     alignItems: 'center',
-    marginBottom: space.md,
+    marginBottom: space.3xl,
     minHeight: 36,
     justifyContent: 'center',
   },
@@ -112,19 +122,25 @@ const styles = createStyles(() => ({
     borderRadius: radius.sm,
   },
   barToday: {
-    backgroundColor: color.accent.base,
+    backgroundColor: color.fg.base,
   },
   barSelected: {
     backgroundColor: color.fg.base,
+  },
+  barNoData: {
+    width: '60%',
+    height: 3,
+    backgroundColor: color.border.base,
+    borderRadius: radius.sm,
   },
   label: {
     fontSize: 9,
     ...inter.medium,
     color: color.fg.subtle,
-    marginTop: space.md,
+    marginTop: space.lg,
   },
   labelToday: {
-    color: color.accent.base,
+    color: color.fg.base,
     ...inter.bold,
   },
   labelSelected: {
