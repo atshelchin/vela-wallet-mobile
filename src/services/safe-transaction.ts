@@ -160,8 +160,8 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 export type GasTier = 'slow' | 'standard' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
-  slow:     { num: 8n,  den: 10n, label: 'Slow' },       // ×0.8
-  standard: { num: 10n, den: 10n, label: 'Standard' },   // ×1.0
+  slow:     { num: 11n, den: 10n, label: 'Slow' },       // ×1.1
+  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2
   fast:     { num: 15n, den: 10n, label: 'Fast' },        // ×1.5
 };
 
