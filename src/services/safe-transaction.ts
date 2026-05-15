@@ -156,11 +156,12 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 // ---------------------------------------------------------------------------
 
 /** Gas speed tier multipliers (applied to on-chain gasPrice). */
-export type GasTier = 'slow' | 'standard' | 'fast';
+export type GasTier = 'slow' | 'standard' | 'rapid' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
-  slow:     { num: 6n, den: 10n, label: 'Slow' },       // ×0.6
+  slow:     { num: 6n,  den: 10n, label: 'Slow' },       // ×0.6
   standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2
+  rapid:    { num: 20n, den: 10n, label: 'Rapid' },       // ×2.0
   fast:     { num: 36n, den: 10n, label: 'Fast' },        // ×3.6
 };
 
@@ -809,19 +810,31 @@ async function submitUserOp(
     maxFeePerGas: dict.maxFeePerGas,
   }));
 
-  const response = await rpcCall(
-    'eth_sendUserOperation',
-    [dict, ENTRY_POINT],
-    chainId,
-  );
+  // Retry on transient bundler errors (e.g. EOA busy processing another bundle).
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 3_000;
 
-  const result = response.result as string | undefined;
-  if (!result) {
-    const error = response.error;
-    throw new Error(parseBundlerError(error));
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const response = await rpcCall(
+      'eth_sendUserOperation',
+      [dict, ENTRY_POINT],
+      chainId,
+    );
+
+    const result = response.result as string | undefined;
+    if (result) return result;
+
+    const errorMsg = parseBundlerError(response.error);
+    const isRetryable = errorMsg.includes('currently processing') || errorMsg.includes('Retry later');
+    if (!isRetryable || attempt === MAX_RETRIES) {
+      throw new Error(errorMsg);
+    }
+
+    console.log(`[UserOp] Bundler busy, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAY}ms...`);
+    await sleep(RETRY_DELAY);
   }
 
-  return result;
+  throw new Error('Bundler unavailable after retries');
 }
 
 async function waitForReceipt(

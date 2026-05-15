@@ -474,7 +474,7 @@ export default function SendScreen() {
           txHash: hash,
           from: activeAccount.address,
           to: recipient,
-          value: amount,
+          value: tokenAmount,
           symbol: selectedToken!.symbol,
           decimals: selectedToken!.decimals,
           chainId,
@@ -879,7 +879,7 @@ export default function SendScreen() {
               <VelaCard style={styles.gasCard}>
                 {/* Tier selector */}
                 <View style={styles.tierRow}>
-                  {(['slow', 'standard', 'fast'] as GasTier[]).map((t) => (
+                  {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((t) => (
                     <Pressable
                       key={t}
                       style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
