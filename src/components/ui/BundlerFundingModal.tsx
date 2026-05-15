@@ -12,7 +12,8 @@ import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform
 import { Check, Copy, RefreshCw } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
-import { chainName } from '@/models/network';
+import { ChainLogo } from '@/components/ChainLogo';
+import { chainName, getAllNetworksSync } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { VelaCard } from './VelaCard';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
@@ -75,7 +76,16 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Activate Gas Relayer</Text>
-          <Text style={styles.networkLabel}>{chainName(funding.chainId)}</Text>
+          {(() => {
+            const net = getAllNetworksSync().find(n => n.chainId === funding.chainId);
+            return (
+              <View style={styles.networkChip}>
+                {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={20} />}
+                <Text style={styles.networkLabel}>{chainName(funding.chainId)}</Text>
+                <Text style={styles.networkChainId}>Chain {funding.chainId}</Text>
+              </View>
+            );
+          })()}
         </View>
 
         {/* QR Code */}
@@ -177,10 +187,25 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     marginBottom: space.xs,
   },
+  networkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.full,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xs,
+    marginTop: space.sm,
+  },
   networkLabel: {
     fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.muted,
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  networkChainId: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
 
   qrWrap: {
