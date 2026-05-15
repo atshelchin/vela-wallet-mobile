@@ -21,32 +21,52 @@ export interface BalancePoint {
 }
 
 // ---------------------------------------------------------------------------
-// Block estimation
+// Block estimation — uses actual on-chain timestamps, no hardcoded values
 // ---------------------------------------------------------------------------
 
-/** Average block time in seconds per chain. */
-const AVG_BLOCK_TIME: Record<number, number> = {
-  1: 12,       // Ethereum
-  56: 3,       // BSC
-  137: 2,      // Polygon
-  42161: 0.25, // Arbitrum
-  10: 2,       // Optimism
-  8453: 2,     // Base
-  43114: 2,    // Avalanche
-  100: 5,      // Gnosis
-};
-
-async function getCurrentBlock(chainId: number): Promise<number> {
-  const res = await rpcCall('eth_blockNumber', [], chainId);
-  if (res.error || !res.result) return 0;
-  return parseInt(res.result as string, 16);
+async function getBlockInfo(chainId: number, blockTag: string): Promise<{ number: number; timestamp: number } | null> {
+  const res = await rpcCall('eth_getBlockByNumber', [blockTag, false], chainId);
+  if (res.error || !res.result) return null;
+  const block = res.result as { number?: string; timestamp?: string };
+  if (!block.number || !block.timestamp) return null;
+  return {
+    number: parseInt(block.number, 16),
+    timestamp: parseInt(block.timestamp, 16),
+  };
 }
 
-function estimateBlockAt(currentBlock: number, currentTime: number, targetTime: number, chainId: number): number {
-  const avgTime = AVG_BLOCK_TIME[chainId] ?? 3;
-  const secondsAgo = (currentTime - targetTime) / 1000;
-  const blocksAgo = Math.floor(secondsAgo / avgTime);
-  return Math.max(0, currentBlock - blocksAgo);
+/**
+ * Estimate block number at a target timestamp by calculating actual block time
+ * from two recent blocks (latest and ~1000 blocks ago).
+ */
+async function estimateBlocks(chainId: number): Promise<{
+  currentBlock: number;
+  currentTimestamp: number;
+  avgBlockTime: number;
+} | null> {
+  const latest = await getBlockInfo(chainId, 'latest');
+  if (!latest) return null;
+
+  // Sample a block ~1000 blocks ago to calculate actual block time
+  const sampleBlock = Math.max(0, latest.number - 1000);
+  const sample = await getBlockInfo(chainId, '0x' + sampleBlock.toString(16));
+  if (!sample) return null;
+
+  const blockDiff = latest.number - sample.number;
+  const timeDiff = latest.timestamp - sample.timestamp;
+  if (blockDiff <= 0 || timeDiff <= 0) return null;
+
+  return {
+    currentBlock: latest.number,
+    currentTimestamp: latest.timestamp,
+    avgBlockTime: timeDiff / blockDiff,
+  };
+}
+
+function blockAtTime(current: { currentBlock: number; currentTimestamp: number; avgBlockTime: number }, targetTimestamp: number): number {
+  const secondsAgo = current.currentTimestamp - targetTimestamp;
+  const blocksAgo = Math.floor(secondsAgo / current.avgBlockTime);
+  return Math.max(0, current.currentBlock - blocksAgo);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,27 +129,38 @@ export async function fetch7DayHistory(params: {
 }): Promise<BalancePoint[]> {
   const { address, chainId, tokenAddress, decimals, currentBalance } = params;
 
-  const now = new Date();
-  const currentBlock = await getCurrentBlock(chainId);
-  if (currentBlock === 0) return [];
+  // Calculate actual block time from recent on-chain data
+  const chain = await estimateBlocks(chainId);
+  if (!chain) return [];
 
-  const nowMs = now.getTime();
+  const now = new Date();
 
   // Generate midnight timestamps for the past 7 days (local time)
-  const midnights: { date: Date; ms: number }[] = [];
+  const midnights: { date: Date; targetTs: number }[] = [];
   for (let i = 7; i >= 1; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     d.setHours(0, 0, 0, 0);
-    midnights.push({ date: d, ms: d.getTime() });
+    midnights.push({ date: d, targetTs: Math.floor(d.getTime() / 1000) });
   }
 
-  // Estimate block numbers and query in parallel
-  const queries = midnights.map(async ({ date, ms }) => {
-    const block = estimateBlockAt(currentBlock, nowMs, ms, chainId);
-    const blockHex = '0x' + block.toString(16);
-    const balance = await queryBalance(address, chainId, tokenAddress, decimals, blockHex);
+  // Estimate block numbers, verify timestamps, query balances — all in parallel
+  const queries = midnights.map(async ({ date, targetTs }) => {
+    const estimatedBlock = blockAtTime(chain, targetTs);
+    const blockHex = '0x' + estimatedBlock.toString(16);
 
+    // Verify: get the actual block timestamp to confirm accuracy
+    const blockInfo = await getBlockInfo(chainId, blockHex);
+    if (!blockInfo) return null;
+
+    // Check the estimated block is within ±1 hour of target midnight
+    const drift = Math.abs(blockInfo.timestamp - targetTs);
+    if (drift > 3600) {
+      console.warn(`[BalanceHistory] Block ${estimatedBlock} timestamp drift ${drift}s > 1h for ${date.toISOString()}, skipping`);
+      return null;
+    }
+
+    const balance = await queryBalance(address, chainId, tokenAddress, decimals, blockHex);
     const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return balance !== null ? { label, balance } : null;
   });
