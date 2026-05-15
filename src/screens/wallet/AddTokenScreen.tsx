@@ -1,28 +1,24 @@
-import { showAlert, hapticSuccess } from '@/services/platform';
-import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, FlatList } from 'react-native';
-import { useSafeRouter } from '@/hooks/use-safe-router';
-import Animated from 'react-native-reanimated';
-import { fadeInDown } from '@/constants/entering';
+import { ChainLogo } from '@/components/ChainLogo';
+import { QRScanner } from '@/components/QRScanner';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
-import { getAllNetworksSync } from '@/models/network';
+import { fadeInDown } from '@/constants/entering';
+import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
+import { useSafeRouter } from '@/hooks/use-safe-router';
 import type { Network } from '@/models/network';
-import { saveCustomToken } from '@/services/storage';
-import type { CustomToken } from '@/models/types';
-import { rpcCall } from '@/services/rpc-adapter';
-import { MULTICALL3, encAggregate3, decAggregate3 } from '@/services/abi';
-import { Check, ArrowLeft, ChevronDown, Search, X, ScanLine, Globe } from 'lucide-react-native';
-import { QRScanner } from '@/components/QRScanner';
-import { searchChains, fetchChainInfo, type ChainSearchResult } from '@/services/chain-registry';
+import { DEFAULT_NETWORKS, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
+import type { CompatibilityResult, CustomNetwork, CustomToken } from '@/models/types';
+import { MULTICALL3, decAggregate3, encAggregate3 } from '@/services/abi';
+import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { saveCustomNetwork, loadCustomNetworks } from '@/services/storage';
-import { refreshCustomNetworks, DEFAULT_NETWORKS } from '@/models/network';
-import { openBrowser } from '@/services/platform';
-import type { CustomNetwork, CompatibilityResult } from '@/models/types';
+import { hapticSuccess, openBrowser, showAlert } from '@/services/platform';
+import { rpcCall } from '@/services/rpc-adapter';
+import { loadCustomNetworks, loadCustomTokens, saveCustomNetwork, saveCustomToken } from '@/services/storage';
+import { ArrowLeft, Check, ChevronDown, Globe, ScanLine, Search, X } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -176,6 +172,7 @@ export default function AddTokenScreen() {
   const [foundTokens, setFoundTokens] = useState<{ chainId: number; networkName: string; name: string; symbol: string; decimals: number }[]>([]);
   const [saving, setSaving] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [addedTokenIds, setAddedTokenIds] = useState<Set<string>>(new Set());
 
   // Network state
   const [netQuery, setNetQuery] = useState('');
@@ -250,7 +247,8 @@ export default function AddTokenScreen() {
       await saveCustomNetwork(network);
       await refreshCustomNetworks();
       hapticSuccess();
-      router.back();
+      setNetError(null);
+      setNetChainInfo({ ...netChainInfo, _added: true });
     } catch {
       showAlert('Error', 'Failed to add network.');
     }
@@ -288,21 +286,29 @@ export default function AddTokenScreen() {
   };
 
   const handleSave = async (token: typeof foundTokens[0]) => {
+    const tokenId = `${token.chainId}_${contractAddress.toLowerCase()}`;
+
+    // Check if already added
+    if (addedTokenIds.has(tokenId)) return;
+    const existing = await loadCustomTokens();
+    if (existing.some(t => t.id === tokenId)) {
+      setAddedTokenIds(prev => new Set(prev).add(tokenId));
+      return;
+    }
+
     setSaving(true);
     try {
-      const custom: CustomToken = {
-        id: `${token.chainId}_${contractAddress.toLowerCase()}`,
+      await saveCustomToken({
+        id: tokenId,
         chainId: token.chainId,
         contractAddress: contractAddress.toLowerCase(),
         symbol: token.symbol,
         name: token.name,
         decimals: token.decimals,
         networkName: token.networkName,
-      };
-
-      await saveCustomToken(custom);
+      });
       hapticSuccess();
-      router.back();
+      setAddedTokenIds(prev => new Set(prev).add(tokenId));
     } catch {
       showAlert('Error', 'Failed to save token.');
     } finally {
@@ -429,13 +435,20 @@ export default function AddTokenScreen() {
                     <Text style={styles.resultLabel}>Native Token</Text>
                     <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.symbol}</Text>
                   </View>
-                  <VelaButton
-                    title="Add Network"
-                    onPress={handleNetAdd}
-                    variant="accent"
-                    loading={netSaving}
-                    style={styles.saveBtn}
-                  />
+                  {netChainInfo._added ? (
+                    <View style={styles.addedRow}>
+                      <Check size={16} color={color.success.base} strokeWidth={2.5} />
+                      <Text style={styles.addedText}>Network Added</Text>
+                    </View>
+                  ) : (
+                    <VelaButton
+                      title="Add Network"
+                      onPress={handleNetAdd}
+                      variant="accent"
+                      loading={netSaving}
+                      style={styles.saveBtn}
+                    />
+                  )}
                 </VelaCard>
               </Animated.View>
             )}
@@ -443,7 +456,7 @@ export default function AddTokenScreen() {
         ) : (
           <>
         {/* ERC-20 tab content — just contract address, auto-detect networks */}
-        <Text style={styles.fieldLabel}>Contract Address</Text>
+        <Text style={styles.fieldLabel}>Token Address</Text>
         <View style={styles.inputRow}>
           <TextInput
             style={styles.inputWithIcon}
@@ -496,13 +509,20 @@ export default function AddTokenScreen() {
                 <Text style={styles.resultValue}>{token.networkName}</Text>
               </View>
 
-              <VelaButton
-                title="Add to Wallet"
-                onPress={() => handleSave(token)}
-                variant="accent"
-                loading={saving}
-                style={styles.saveBtn}
-              />
+              {addedTokenIds.has(`${token.chainId}_${contractAddress.toLowerCase()}`) ? (
+                <View style={styles.addedRow}>
+                  <Check size={16} color={color.success.base} strokeWidth={2.5} />
+                  <Text style={styles.addedText}>Added</Text>
+                </View>
+              ) : (
+                <VelaButton
+                  title="Add to Wallet"
+                  onPress={() => handleSave(token)}
+                  variant="accent"
+                  loading={saving}
+                  style={styles.saveBtn}
+                />
+              )}
             </VelaCard>
           </Animated.View>
         ))}
@@ -822,5 +842,18 @@ const styles = createStyles(() => ({
   },
   saveBtn: {
     marginTop: space['2xl'],
+  },
+  addedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    marginTop: space['2xl'],
+    paddingVertical: space.lg,
+  },
+  addedText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.success.base,
   },
 }));
