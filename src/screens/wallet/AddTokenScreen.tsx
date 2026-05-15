@@ -172,9 +172,8 @@ export default function AddTokenScreen() {
 
   // ERC-20 state
   const [contractAddress, setContractAddress] = useState('');
-  const [selectedChainId, setSelectedChainId] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [tokenMeta, setTokenMeta] = useState<{ name: string; symbol: string; decimals: number } | null>(null);
+  const [foundTokens, setFoundTokens] = useState<{ chainId: number; networkName: string; name: string; symbol: string; decimals: number }[]>([]);
   const [saving, setSaving] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
@@ -187,8 +186,6 @@ export default function AddTokenScreen() {
   const [netLoading, setNetLoading] = useState(false);
   const [netSaving, setNetSaving] = useState(false);
   const [netError, setNetError] = useState<string | null>(null);
-
-  const selectedNetwork = getAllNetworksSync().find((n) => n.chainId === selectedChainId) ?? getAllNetworksSync()[0];
 
   // --- Network tab logic ---
   const handleNetSearch = async (q: string) => {
@@ -263,43 +260,47 @@ export default function AddTokenScreen() {
   const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(contractAddress);
 
   const fetchTokenMetadata = async () => {
-    if (!isValidAddress || !selectedNetwork) return;
+    if (!isValidAddress) return;
 
     setLoading(true);
-    setTokenMeta(null);
+    setFoundTokens([]);
 
-    try {
-      const meta = await fetchErc20Meta(selectedNetwork.chainId, contractAddress);
+    // Query all networks in parallel
+    const allNetworks = getAllNetworksSync();
+    const results = await Promise.allSettled(
+      allNetworks.map(async (network) => {
+        const meta = await fetchErc20Meta(network.chainId, contractAddress);
+        if (!meta) return null;
+        return { chainId: network.chainId, networkName: network.displayName, ...meta };
+      }),
+    );
 
-      if (!meta) {
-        showAlert('Not Found', 'Could not find a valid ERC-20 token at this address.');
-        return;
-      }
-
-      setTokenMeta(meta);
-    } catch (err) {
-      showAlert('Error', 'Failed to fetch token metadata. Check the address and network.');
-    } finally {
-      setLoading(false);
+    const found: typeof foundTokens = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) found.push(r.value);
     }
+
+    if (found.length === 0) {
+      showAlert('Not Found', 'Could not find this token on any network.');
+    }
+    setFoundTokens(found);
+    setLoading(false);
   };
 
-  const handleSave = async () => {
-    if (!tokenMeta || !selectedNetwork) return;
-
+  const handleSave = async (token: typeof foundTokens[0]) => {
     setSaving(true);
     try {
-      const token: CustomToken = {
-        id: `${selectedChainId}_${contractAddress.toLowerCase()}`,
-        chainId: selectedChainId,
+      const custom: CustomToken = {
+        id: `${token.chainId}_${contractAddress.toLowerCase()}`,
+        chainId: token.chainId,
         contractAddress: contractAddress.toLowerCase(),
-        symbol: tokenMeta.symbol,
-        name: tokenMeta.name,
-        decimals: tokenMeta.decimals,
-        networkName: selectedNetwork.displayName,
+        symbol: token.symbol,
+        name: token.name,
+        decimals: token.decimals,
+        networkName: token.networkName,
       };
 
-      await saveCustomToken(token);
+      await saveCustomToken(custom);
       hapticSuccess();
       router.back();
     } catch {
@@ -441,14 +442,7 @@ export default function AddTokenScreen() {
           </>
         ) : (
           <>
-        {/* ERC-20 tab content */}
-        <Text style={styles.fieldLabel}>Network</Text>
-        <NetworkPicker
-          selected={selectedNetwork}
-          onSelect={(n) => { setSelectedChainId(n.chainId); setTokenMeta(null); }}
-        />
-
-        {/* Contract address input */}
+        {/* ERC-20 tab content — just contract address, auto-detect networks */}
         <Text style={styles.fieldLabel}>Contract Address</Text>
         <View style={styles.inputRow}>
           <TextInput
@@ -458,7 +452,7 @@ export default function AddTokenScreen() {
             value={contractAddress}
             onChangeText={(t) => {
               setContractAddress(t);
-              setTokenMeta(null);
+              setFoundTokens([]);
             }}
             autoCapitalize="none"
             autoCorrect={false}
@@ -470,7 +464,7 @@ export default function AddTokenScreen() {
 
         {/* Fetch button */}
         <VelaButton
-          title="Fetch Token Info"
+          title={loading ? 'Searching all networks...' : 'Search Token'}
           onPress={fetchTokenMetadata}
           disabled={!isValidAddress || loading}
           loading={loading}
@@ -478,44 +472,40 @@ export default function AddTokenScreen() {
           style={styles.fetchBtn}
         />
 
-        {/* Token metadata result */}
-        {tokenMeta && (
-          <Animated.View entering={fadeInDown(0, 300)}>
-            <VelaCard elevated style={styles.resultCard}>
-              <View style={styles.resultHeader}>
-                <Check size={20} color={color.success.base} strokeWidth={2.5} />
-                <Text style={styles.resultTitle}>Token Found</Text>
-              </View>
+        {/* Results — one card per network where the token was found */}
+        {foundTokens.map((token) => (
+          <Animated.View key={token.chainId} entering={fadeInDown(0, 300)}>
+            <VelaCard style={styles.resultCard}>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Name</Text>
-                <Text style={styles.resultValue}>{tokenMeta.name}</Text>
+                <Text style={styles.resultValue}>{token.name}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Symbol</Text>
-                <Text style={styles.resultValue}>{tokenMeta.symbol}</Text>
+                <Text style={styles.resultValue}>{token.symbol}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Decimals</Text>
-                <Text style={styles.resultValue}>{tokenMeta.decimals}</Text>
+                <Text style={styles.resultValue}>{token.decimals}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Network</Text>
-                <Text style={styles.resultValue}>{selectedNetwork?.displayName}</Text>
+                <Text style={styles.resultValue}>{token.networkName}</Text>
               </View>
 
               <VelaButton
                 title="Add to Wallet"
-                onPress={handleSave}
+                onPress={() => handleSave(token)}
                 variant="accent"
                 loading={saving}
                 style={styles.saveBtn}
               />
             </VelaCard>
           </Animated.View>
-        )}
+        ))}
           </>
         )}
       </ScrollView>
@@ -529,7 +519,7 @@ export default function AddTokenScreen() {
             const match = data.match(/0x[0-9a-fA-F]{40}/);
             if (match) {
               setContractAddress(match[0]);
-              setTokenMeta(null);
+              setFoundTokens([]);
             }
           }}
           onClose={() => setShowScanner(false)}
