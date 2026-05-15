@@ -1,10 +1,11 @@
 /**
  * 7-day historical balance for a token.
  *
- * Estimates block numbers for each day's local midnight,
- * then queries eth_getBalance (native) or balanceOf (ERC-20)
- * at those blocks. Silently skips days where the RPC doesn't
- * support archive queries.
+ * Estimates block numbers for each day's local midnight using actual
+ * on-chain timestamps, then queries historical balances.
+ *
+ * Archive RPC discovery: tries all endpoints in the RPC pool for each chain,
+ * remembers which ones support archive queries, and uses those for subsequent calls.
  */
 
 import { rpcCall } from './rpc-adapter';
@@ -21,7 +22,85 @@ export interface BalancePoint {
 }
 
 // ---------------------------------------------------------------------------
-// Block estimation — uses actual on-chain timestamps, no hardcoded values
+// Archive RPC discovery + cache
+// ---------------------------------------------------------------------------
+
+/** Cache: chainId → archive-capable RPC URL (null = no archive RPC found) */
+const archiveRpcCache = new Map<number, string | null>();
+
+/**
+ * Direct JSON-RPC call to a specific URL (bypass rpc-pool).
+ */
+async function directRpcCall(
+  url: string,
+  method: string,
+  params: any[],
+): Promise<{ result?: any; error?: any }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  });
+  return res.json();
+}
+
+/**
+ * Find an RPC endpoint that supports archive queries for this chain.
+ * Tests by querying eth_getBalance at a block ~1 day old.
+ * Result is cached permanently (archive support doesn't change).
+ */
+async function findArchiveRpc(chainId: number, testAddress: string, oldBlockHex: string): Promise<string | null> {
+  if (archiveRpcCache.has(chainId)) return archiveRpcCache.get(chainId) ?? null;
+
+  // Get all RPC URLs for this chain from the pool
+  const urls = await getChainRpcUrls(chainId);
+
+  for (const url of urls) {
+    try {
+      const res = await directRpcCall(url, 'eth_getBalance', [testAddress, oldBlockHex]);
+      if (res.result && !res.error) {
+        console.log(`[BalanceHistory] Archive RPC found for chain ${chainId}: ${url}`);
+        archiveRpcCache.set(chainId, url);
+        return url;
+      }
+    } catch { /* try next */ }
+  }
+
+  console.warn(`[BalanceHistory] No archive RPC found for chain ${chainId}`);
+  archiveRpcCache.set(chainId, null);
+  return null;
+}
+
+/**
+ * Get all known RPC URLs for a chain by peeking into the rpc-pool internals.
+ * Falls back to a few well-known public archive RPCs.
+ */
+async function getChainRpcUrls(chainId: number): Promise<string[]> {
+  // Try to get the pool's current best URL first
+  const { getChainRpcUrl } = await import('./rpc-pool');
+  const poolUrl = await getChainRpcUrl(chainId);
+
+  // Well-known RPCs that often support archive (drpc, llamarpc, etc.)
+  const knownArchive: Record<number, string[]> = {
+    1:     ['https://eth.drpc.org', 'https://rpc.ankr.com/eth'],
+    56:    ['https://bsc.drpc.org', 'https://bsc-mainnet.public.blastapi.io'],
+    137:   ['https://polygon.drpc.org', 'https://polygon-mainnet.public.blastapi.io'],
+    42161: ['https://arbitrum.drpc.org'],
+    10:    ['https://optimism.drpc.org'],
+    8453:  ['https://base.drpc.org'],
+    43114: ['https://avalanche.drpc.org'],
+    100:   ['https://gnosis.drpc.org'],
+  };
+
+  const urls = new Set<string>();
+  if (poolUrl) urls.add(poolUrl);
+  for (const u of knownArchive[chainId] ?? []) urls.add(u);
+
+  return [...urls];
+}
+
+// ---------------------------------------------------------------------------
+// Block estimation — uses actual on-chain timestamps
 // ---------------------------------------------------------------------------
 
 async function getBlockInfo(chainId: number, blockTag: string): Promise<{ number: number; timestamp: number } | null> {
@@ -35,10 +114,6 @@ async function getBlockInfo(chainId: number, blockTag: string): Promise<{ number
   };
 }
 
-/**
- * Estimate block number at a target timestamp by calculating actual block time
- * from two recent blocks (latest and ~1000 blocks ago).
- */
 async function estimateBlocks(chainId: number): Promise<{
   currentBlock: number;
   currentTimestamp: number;
@@ -47,7 +122,6 @@ async function estimateBlocks(chainId: number): Promise<{
   const latest = await getBlockInfo(chainId, 'latest');
   if (!latest) return null;
 
-  // Sample a block ~1000 blocks ago to calculate actual block time
   const sampleBlock = Math.max(0, latest.number - 1000);
   const sample = await getBlockInfo(chainId, '0x' + sampleBlock.toString(16));
   if (!sample) return null;
@@ -63,17 +137,16 @@ async function estimateBlocks(chainId: number): Promise<{
   };
 }
 
-function blockAtTime(current: { currentBlock: number; currentTimestamp: number; avgBlockTime: number }, targetTimestamp: number): number {
-  const secondsAgo = current.currentTimestamp - targetTimestamp;
-  const blocksAgo = Math.floor(secondsAgo / current.avgBlockTime);
-  return Math.max(0, current.currentBlock - blocksAgo);
+function blockAtTime(chain: { currentBlock: number; currentTimestamp: number; avgBlockTime: number }, targetTs: number): number {
+  const secondsAgo = chain.currentTimestamp - targetTs;
+  const blocksAgo = Math.floor(secondsAgo / chain.avgBlockTime);
+  return Math.max(0, chain.currentBlock - blocksAgo);
 }
 
 // ---------------------------------------------------------------------------
-// Balance queries
+// Balance queries (via archive RPC)
 // ---------------------------------------------------------------------------
 
-/** ERC-20 balanceOf(address) selector */
 const BALANCE_OF = '0x70a08231';
 
 function encodeBalanceOf(address: string): string {
@@ -81,31 +154,22 @@ function encodeBalanceOf(address: string): string {
 }
 
 async function queryBalance(
+  archiveUrl: string,
   address: string,
-  chainId: number,
   tokenAddress: string | null,
   decimals: number,
   blockHex: string,
 ): Promise<number | null> {
   try {
-    let result: string | undefined;
-
+    let res;
     if (!tokenAddress) {
-      // Native token
-      const res = await rpcCall('eth_getBalance', [address, blockHex], chainId);
-      if (res.error || !res.result) return null;
-      result = res.result as string;
+      res = await directRpcCall(archiveUrl, 'eth_getBalance', [address, blockHex]);
     } else {
-      // ERC-20
       const data = encodeBalanceOf(address);
-      const res = await rpcCall('eth_call', [{ to: tokenAddress, data }, blockHex], chainId);
-      if (res.error || !res.result || res.result === '0x') return null;
-      result = res.result as string;
+      res = await directRpcCall(archiveUrl, 'eth_call', [{ to: tokenAddress, data }, blockHex]);
     }
-
-    // Convert hex wei to float
-    const wei = BigInt(result);
-    return Number(wei) / Math.pow(10, decimals);
+    if (res.error || !res.result || res.result === '0x') return null;
+    return Number(BigInt(res.result)) / Math.pow(10, decimals);
   } catch {
     return null;
   }
@@ -118,7 +182,7 @@ async function queryBalance(
 /**
  * Fetch 7-day balance history for a token.
  * Returns up to 8 data points (7 past midnights + current balance).
- * Points where the RPC doesn't support archive queries are omitted.
+ * Automatically discovers archive-capable RPCs and caches the result.
  */
 export async function fetch7DayHistory(params: {
   address: string;
@@ -129,13 +193,12 @@ export async function fetch7DayHistory(params: {
 }): Promise<BalancePoint[]> {
   const { address, chainId, tokenAddress, decimals, currentBalance } = params;
 
-  // Calculate actual block time from recent on-chain data
   const chain = await estimateBlocks(chainId);
   if (!chain) return [];
 
   const now = new Date();
 
-  // Generate midnight timestamps for the past 7 days (local time)
+  // Generate midnight timestamps for the past 7 days
   const midnights: { date: Date; targetTs: number }[] = [];
   for (let i = 7; i >= 1; i--) {
     const d = new Date(now);
@@ -144,37 +207,39 @@ export async function fetch7DayHistory(params: {
     midnights.push({ date: d, targetTs: Math.floor(d.getTime() / 1000) });
   }
 
-  // Estimate block numbers, verify timestamps, query balances — all in parallel
+  // Estimate a test block (~1 day ago) for archive RPC discovery
+  const testBlock = blockAtTime(chain, chain.currentTimestamp - 86400);
+  const testBlockHex = '0x' + testBlock.toString(16);
+
+  // Find an archive-capable RPC for this chain
+  const archiveUrl = await findArchiveRpc(chainId, address, testBlockHex);
+  if (!archiveUrl) {
+    // No archive RPC — return only today's balance
+    const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return [{ label: todayLabel, balance: currentBalance }];
+  }
+
+  // Query all 7 days in parallel via the archive RPC
   const queries = midnights.map(async ({ date, targetTs }) => {
-    const estimatedBlock = blockAtTime(chain, targetTs);
-    const blockHex = '0x' + estimatedBlock.toString(16);
+    const block = blockAtTime(chain, targetTs);
+    const blockHex = '0x' + block.toString(16);
 
-    // Verify: get the actual block timestamp to confirm accuracy
+    // Verify block timestamp is within ±1 hour of target
     const blockInfo = await getBlockInfo(chainId, blockHex);
-    if (!blockInfo) return null;
+    if (!blockInfo || Math.abs(blockInfo.timestamp - targetTs) > 3600) return null;
 
-    // Check the estimated block is within ±1 hour of target midnight
-    const drift = Math.abs(blockInfo.timestamp - targetTs);
-    if (drift > 3600) {
-      console.warn(`[BalanceHistory] Block ${estimatedBlock} timestamp drift ${drift}s > 1h for ${date.toISOString()}, skipping`);
-      return null;
-    }
-
-    const balance = await queryBalance(address, chainId, tokenAddress, decimals, blockHex);
+    const balance = await queryBalance(archiveUrl, address, tokenAddress, decimals, blockHex);
     const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return balance !== null ? { label, balance } : null;
   });
 
   const results = await Promise.allSettled(queries);
   const points: BalancePoint[] = [];
-
   for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) {
-      points.push(r.value);
-    }
+    if (r.status === 'fulfilled' && r.value) points.push(r.value);
   }
 
-  // Add current balance as today's data point
+  // Add today
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   points.push({ label: todayLabel, balance: currentBalance });
 

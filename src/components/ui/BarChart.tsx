@@ -121,7 +121,7 @@ const styles = createStyles(() => ({
     fontSize: 9,
     ...inter.medium,
     color: color.fg.subtle,
-    marginTop: space.xs,
+    marginTop: space.md,
   },
   labelToday: {
     color: color.accent.base,
