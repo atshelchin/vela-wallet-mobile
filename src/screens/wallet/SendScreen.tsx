@@ -15,11 +15,10 @@ import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
+import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { openBrowser } from '@/services/platform';
-import { getAllNetworksSync } from '@/models/network';
 import { showAlert } from '@/services/platform';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
@@ -30,7 +29,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -945,25 +944,21 @@ export default function SendScreen() {
                   </Text>
                 </View>
               )}
-              {txStatus === 'confirmed' && (
-                <View style={styles.txStatusRow}>
-                  <CheckCircle2 size={20} color={color.success.base} strokeWidth={2.5} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.txStatusSuccess}>Transaction Confirmed</Text>
-                    {txHash && selectedToken && (
-                      <Pressable onPress={() => {
-                        const chainId = tokenChainId(selectedToken);
-                        const network = getAllNetworksSync().find(n => n.chainId === chainId);
-                        const base = network?.explorerURL ?? 'https://etherscan.io';
-                        openBrowser(`${base}/tx/${txHash}`);
-                      }}>
-                        <Text style={styles.txStatusHash} numberOfLines={1} ellipsizeMode="middle">
-                          {txHash} ↗
-                        </Text>
-                      </Pressable>
-                    )}
-                  </View>
-                </View>
+              {txStatus === 'confirmed' && selectedToken && (
+                <TransactionReceipt
+                  from={activeAccount?.address ?? ''}
+                  fromName={activeAccount?.name}
+                  to={recipient}
+                  toName={recipientIdentity?.name}
+                  amount={resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)}
+                  symbol={selectedToken.symbol}
+                  chainId={tokenChainId(selectedToken)}
+                  txHash={txHash ?? ''}
+                  logoUrls={tokenLogoURLs(selectedToken)}
+                  usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
+                  timestamp={new Date()}
+                  recipientIdentity={recipientIdentity}
+                />
               )}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
