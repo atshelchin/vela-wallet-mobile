@@ -154,6 +154,8 @@ export default function HomeScreen() {
   const { activeAccount, state, dispatch } = useWallet();
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
+  const [allTokens, setAllTokens] = useState<APIToken[]>([]);
+  const [showZeroBalance, setShowZeroBalance] = useState(false);
   const [debugBalance, setDebugBalance] = useState<number | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -222,6 +224,8 @@ export default function HomeScreen() {
         onFailedChains: (ids) => setFailedChainIds(ids),
       });
       setTokens(result);
+      // Fetch all tokens (including zero balance) for hidden count
+      fetchTokens(address, { includeZeroBalance: true }).then(all => setAllTokens(all)).catch(() => {});
       // Cache total USD for this account
       const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
       setAccountBalance(address, usd);
@@ -443,7 +447,16 @@ export default function HomeScreen() {
 
       {/* Token list header */}
       <View style={styles.tokenListHeader}>
-        <Text style={styles.tokenListTitle}>Assets</Text>
+        <View style={styles.tokenListTitleRow}>
+          <Text style={styles.tokenListTitle}>Assets</Text>
+          {hiddenCount > 0 && (
+            <Pressable onPress={() => setShowZeroBalance(!showZeroBalance)} hitSlop={8}>
+              <Text style={styles.hiddenCount}>
+                {showZeroBalance ? 'Hide zero' : `${hiddenCount} hidden`}
+              </Text>
+            </Pressable>
+          )}
+        </View>
         <View style={styles.tokenListActions}>
           {Platform.OS === 'web' && (
             <Pressable
@@ -527,12 +540,14 @@ export default function HomeScreen() {
     );
   };
 
+  const hiddenCount = allTokens.length - tokens.length;
+  const displayTokens = showZeroBalance ? allTokens : tokens;
   const filteredTokens = tokenSearch
-    ? tokens.filter(t =>
+    ? displayTokens.filter(t =>
         t.symbol.toLowerCase().includes(tokenSearch.toLowerCase()) ||
         t.name.toLowerCase().includes(tokenSearch.toLowerCase())
       )
-    : tokens;
+    : displayTokens;
 
   return (
     <ScreenContainer>
@@ -836,10 +851,20 @@ const styles = createStyles(() => ({
     marginBottom: space.md,
     paddingHorizontal: space.sm,
   },
+  tokenListTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
   tokenListTitle: {
     fontSize: text.lg,
     ...inter.bold,
     color: color.fg.base,
+  },
+  hiddenCount: {
+    fontSize: text.xs,
+    ...inter.medium,
+    color: color.fg.subtle,
   },
   tokenListActions: {
     flexDirection: 'row',

@@ -63,6 +63,8 @@ const tokenCache = new Map<string, TokenCacheEntry>();
 export type FetchTokensOptions = {
   forceRefresh?: boolean;
   maxAgeMs?: number;
+  /** Include tokens with zero balance (for managing watchlist). Default: false. */
+  includeZeroBalance?: boolean;
   /** Called each time a chain finishes, with the accumulated tokens so far (sorted by USD value). */
   onProgress?: (tokens: APIToken[]) => void;
   /** Called after all chains finish, with the chain IDs whose RPC endpoints all failed. */
@@ -95,7 +97,7 @@ export async function fetchTokens(
     if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
   }
 
-  const request = fetchAllChainTokens(address, options.onProgress, options.onFailedChains);
+  const request = fetchAllChainTokens(address, options.onProgress, options.onFailedChains, options.includeZeroBalance);
   tokenCache.set(cacheKey, {
     fetchedAt: cached?.fetchedAt ?? 0,
     tokens: cached?.tokens ?? [],
@@ -138,6 +140,7 @@ async function fetchAllChainTokens(
   address: string,
   onProgress?: (tokens: APIToken[]) => void,
   onFailedChains?: (chainIds: number[]) => void,
+  includeZeroBalance?: boolean,
 ): Promise<APIToken[]> {
   // Phase 1: load prerequisites in parallel
   const [customTokens, clPrices] = await Promise.all([
@@ -151,7 +154,7 @@ async function fetchAllChainTokens(
 
   const sortAndFilter = () =>
     accumulated
-      .filter(t => parseFloat(t.balance) > 0)
+      .filter(t => includeZeroBalance || parseFloat(t.balance) > 0)
       .sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
 
   await Promise.allSettled(
