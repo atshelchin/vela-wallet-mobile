@@ -8,7 +8,7 @@
  *   3. Stack key={resolved} in _layout.tsx remounts the navigation tree,
  *      so all screens render fresh with correct colors
  */
-import { Appearance } from 'react-native';
+import { Appearance, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
@@ -55,6 +55,20 @@ export function applyColorScheme(pref: ColorSchemePreference): void {
   }
 }
 
+const WEB_THEME_COLORS = { light: '#FAFAF8', dark: '#141412' };
+
+/** Update Safari address bar / status bar tint on web. */
+function applyWebThemeColor(resolved: 'light' | 'dark'): void {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  const hex = WEB_THEME_COLORS[resolved];
+  // Remove media-specific tags and set a single explicit color
+  document.querySelectorAll('meta[name="theme-color"]').forEach((el) => el.remove());
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = hex;
+  document.head.appendChild(meta);
+}
+
 // ---------------------------------------------------------------------------
 // React Context
 // ---------------------------------------------------------------------------
@@ -85,6 +99,7 @@ export function ColorSchemeProvider({ children }: { children: React.ReactNode })
   // before the Stack (with key={resolved}) mounts fresh screens.
   const { rebuildColors } = require('@/constants/theme');
   rebuildColors(resolved === 'dark');
+  applyWebThemeColor(resolved);
 
   const setPreference = useCallback((pref: ColorSchemePreference) => {
     _preference = pref;
