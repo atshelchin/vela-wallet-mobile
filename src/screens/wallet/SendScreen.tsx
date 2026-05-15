@@ -22,7 +22,7 @@ import { openBrowser } from '@/services/platform';
 import { getAllNetworksSync } from '@/models/network';
 import { showAlert } from '@/services/platform';
 import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
+import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -30,7 +30,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -922,7 +922,7 @@ export default function SendScreen() {
               {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
                 <View style={styles.txStatusRow}>
                   <Animated.View style={styles.txSpinner}>
-                    <Loader size={20} color={color.accent.base} strokeWidth={2.5} />
+                    <ActivityIndicator size="small" color={color.accent.base} />
                   </Animated.View>
                   <Text style={styles.txStatusText}>
                     {txStatus === 'preparing' ? 'Preparing transaction...' :

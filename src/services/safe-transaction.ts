@@ -4,30 +4,29 @@
  */
 
 import {
-  keccak256,
   abiEncodeAddress,
+  abiEncodeBytes32,
   abiEncodeUint256,
   abiEncodeUint256Hex,
-  abiEncodeBytes32,
   functionSelector,
+  keccak256,
 } from './eth-crypto';
 
-import { toHex, fromHex, concatBytes, stripHexPrefix } from './hex';
+import { concatBytes, fromHex, stripHexPrefix, toHex } from './hex';
 
 import {
-  SAFE_SINGLETON,
-  SAFE_PROXY_FACTORY,
   ENTRY_POINT,
   SAFE_4337_MODULE,
+  SAFE_PROXY_FACTORY,
+  SAFE_SINGLETON,
   WEBAUTHN_SIGNER,
-  SAFE_MODULE_SETUP,
-  parsePublicKey,
-  encodeSetupData,
   calculateSaltNonce,
+  encodeSetupData,
+  parsePublicKey
 } from './safe-address';
 
-import { rpcCall } from './rpc-adapter';
 import { derSignatureToRaw } from './attestation-parser';
+import { rpcCall } from './rpc-adapter';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -160,9 +159,9 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 export type GasTier = 'slow' | 'standard' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
-  slow:     { num: 11n, den: 10n, label: 'Slow' },       // ×1.1
-  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2
-  fast:     { num: 15n, den: 10n, label: 'Fast' },        // ×1.5
+  slow:     { num: 6n, den: 10n, label: 'Slow' },       // ×0.6
+  standard: { num: 11n, den: 10n, label: 'Standard' },   // ×1.1
+  fast:     { num: 18n, den: 10n, label: 'Fast' },        // ×1.8
 };
 
 /** Detailed gas fee estimate for display and max-send calculation. */
@@ -841,9 +840,13 @@ async function waitForReceipt(
     );
 
     const result = response.result as
-      | { receipt?: { transactionHash?: string } }
+      | { success?: boolean; receipt?: { transactionHash?: string } }
       | undefined;
     if (result?.receipt?.transactionHash) {
+      // Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
+      if (result.success === false) {
+        throw new Error('Transaction was dropped from the network. Try again with a higher gas price.');
+      }
       return result.receipt.transactionHash;
     }
 
