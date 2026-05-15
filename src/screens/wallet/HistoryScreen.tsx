@@ -18,6 +18,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
+import { formatBalance } from '@/models/types';
 import { openBrowser } from '@/services/platform';
 import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
 
@@ -136,7 +137,7 @@ export default function HistoryScreen() {
 
         <View style={styles.txValues}>
           <Text style={styles.txAmount}>
-            -{item.value} {item.symbol}
+            -{formatBalance(parseFloat(item.value))} {item.symbol}
           </Text>
           <Text style={styles.txTime}>
             {item.status === 'failed' ? 'Failed' : formatTime(item.timestamp)}
