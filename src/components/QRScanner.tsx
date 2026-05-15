@@ -1,7 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Platform, View, Text, StyleSheet, Pressable } from 'react-native';
-import { showAlert } from '@/services/platform';
-import { AppModal } from '@/components/ui/AppModal';
+import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { showAlert, hapticSuccess } from '@/services/platform';
 import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
@@ -22,6 +29,30 @@ function parseAddress(data: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Scan line animation
+// ---------------------------------------------------------------------------
+
+function ScanLine() {
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = withRepeat(
+      withTiming(FRAME_SIZE - 2, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, [translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.scanLine, animatedStyle]} />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Web camera component using getUserMedia + jsQR
 // ---------------------------------------------------------------------------
 
@@ -29,25 +60,27 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval>>(0 as any);
 
   const scan = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
-      rafRef.current = requestAnimationFrame(scan);
-      return;
-    }
+    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA || scanned) return;
+
     const ctx = canvas.getContext('2d')!;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data as any, imageData.width, imageData.height);
-    if (code?.data && !scanned) {
+    // Scan at reduced resolution for performance
+    const w = Math.min(video.videoWidth, 640);
+    const h = Math.round(w * (video.videoHeight / video.videoWidth));
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert',
+    });
+    if (code?.data) {
       onScan(code.data);
     }
-    rafRef.current = requestAnimationFrame(scan);
   }, [onScan, scanned]);
 
   useEffect(() => {
@@ -62,10 +95,13 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         }
       })
       .catch(() => {});
-    rafRef.current = requestAnimationFrame(scan);
+
+    // Scan every 200ms instead of every frame — much better performance
+    timerRef.current = setInterval(scan, 200);
+
     return () => {
       mounted = false;
-      cancelAnimationFrame(rafRef.current);
+      clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, [scan]);
@@ -74,27 +110,13 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
     <View style={styles.cameraContainer}>
       <video
         ref={videoRef as any}
-        style={{ width: '100%', height: '100%', objectFit: 'cover' } as any}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' } as any}
         playsInline
         muted
         autoPlay
       />
       <canvas ref={canvasRef as any} style={{ display: 'none' } as any} />
-      {/* Overlay with scanning frame */}
-      <View style={styles.overlay}>
-        <View style={styles.overlayTop} />
-        <View style={styles.overlayMiddle}>
-          <View style={styles.overlaySide} />
-          <View style={styles.scanFrame}>
-            <View style={[styles.corner, styles.cornerTL]} />
-            <View style={[styles.corner, styles.cornerTR]} />
-            <View style={[styles.corner, styles.cornerBL]} />
-            <View style={[styles.corner, styles.cornerBR]} />
-          </View>
-          <View style={styles.overlaySide} />
-        </View>
-        <View style={styles.overlayBottom} />
-      </View>
+      <ScanOverlay />
     </View>
   );
 }
@@ -132,19 +154,24 @@ function NativeCamera({ facing, onBarCodeScanned }: {
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={onBarCodeScanned}
       />
-      <View style={styles.overlay}>
-        <View style={styles.overlayTop} />
-        <View style={styles.overlayMiddle}>
-          <View style={styles.overlaySide} />
-          <View style={styles.scanFrame}>
-            <View style={[styles.corner, styles.cornerTL]} />
-            <View style={[styles.corner, styles.cornerTR]} />
-            <View style={[styles.corner, styles.cornerBL]} />
-            <View style={[styles.corner, styles.cornerBR]} />
-          </View>
-          <View style={styles.overlaySide} />
-        </View>
-        <View style={styles.overlayBottom} />
+      <ScanOverlay />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scan overlay with corners + animated line
+// ---------------------------------------------------------------------------
+
+function ScanOverlay() {
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.scanFrame}>
+        <View style={[styles.corner, styles.cornerTL]} />
+        <View style={[styles.corner, styles.cornerTR]} />
+        <View style={[styles.corner, styles.cornerBL]} />
+        <View style={[styles.corner, styles.cornerBR]} />
+        <ScanLine />
       </View>
     </View>
   );
@@ -158,9 +185,15 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   const [scanned, setScanned] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
 
+  // Reset scanned state when modal opens
+  useEffect(() => {
+    if (visible) setScanned(false);
+  }, [visible]);
+
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
     setScanned(true);
+    hapticSuccess();
     onScan(parseAddress(data));
     setTimeout(() => setScanned(false), 2000);
   }
@@ -168,7 +201,6 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   async function handlePickImage() {
     try {
       if (Platform.OS === 'web') {
-        // Web: use file input to pick image, then decode via canvas + jsQR
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
@@ -176,12 +208,18 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           const file = input.files?.[0];
           if (!file) return;
           const bitmap = await createImageBitmap(file);
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          // Scale down large images for faster processing
+          const maxDim = 1024;
+          const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+          const w = Math.round(bitmap.width * scale);
+          const h = Math.round(bitmap.height * scale);
+          const canvas = new OffscreenCanvas(w, h);
           const ctx = canvas.getContext('2d')!;
-          ctx.drawImage(bitmap, 0, 0);
-          const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+          ctx.drawImage(bitmap, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
           const code = jsQR(imageData.data as any, imageData.width, imageData.height);
           if (code?.data) {
+            hapticSuccess();
             onScan(parseAddress(code.data));
           } else {
             showAlert('No QR Found', 'Could not find a QR code in the selected image.');
@@ -199,6 +237,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         const { scanFromURLAsync } = await import('expo-camera');
         const barcodes = await scanFromURLAsync(uri, ['qr']);
         if (barcodes.length > 0 && barcodes[0].data) {
+          hapticSuccess();
           onScan(parseAddress(barcodes[0].data));
         } else {
           showAlert('No QR Found', 'Could not find a QR code in the selected image.');
@@ -211,61 +250,85 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
   if (!visible) return null;
 
-  return (
-    <AppModal visible={visible}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
-            <X size={22} color={color.accent.base} strokeWidth={2.5} />
+  const content = (
+    <View style={styles.container}>
+      {/* Camera */}
+      {Platform.OS === 'web' ? (
+        <WebCamera onScan={(data) => handleBarCodeScanned({ data })} scanned={scanned} />
+      ) : (
+        <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} />
+      )}
+
+      {/* Header overlay — on top of camera */}
+      <SafeAreaView style={styles.headerOverlay} edges={['top']}>
+        <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
+          <X size={22} color="#fff" strokeWidth={2.5} />
+        </Pressable>
+        <Text style={styles.title}>Scan QR</Text>
+        <View style={styles.headerRight}>
+          <Pressable onPress={handlePickImage} hitSlop={8} style={styles.headerBtn}>
+            <ImagePlus size={20} color="#fff" strokeWidth={2} />
           </Pressable>
-          <Text style={styles.title}>Scan QR</Text>
-          <View style={styles.headerRight}>
-            <Pressable onPress={handlePickImage} hitSlop={8} style={styles.headerBtn}>
-              <ImagePlus size={20} color={color.accent.base} strokeWidth={2} />
+          {Platform.OS !== 'web' && (
+            <Pressable
+              onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
+              hitSlop={8}
+              style={styles.headerBtn}
+            >
+              <SwitchCamera size={20} color="#fff" strokeWidth={2} />
             </Pressable>
-            {Platform.OS !== 'web' && (
-              <Pressable
-                onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
-                hitSlop={8}
-                style={styles.headerBtn}
-              >
-                <SwitchCamera size={20} color={color.accent.base} strokeWidth={2} />
-              </Pressable>
-            )}
-          </View>
+          )}
         </View>
+      </SafeAreaView>
 
-        {Platform.OS === 'web' ? (
-          <WebCamera onScan={(data) => handleBarCodeScanned({ data })} scanned={scanned} />
-        ) : (
-          <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} />
-        )}
+      {/* Footer hint */}
+      <SafeAreaView style={styles.footerOverlay} edges={['bottom']}>
+        <Text style={styles.hint}>Point camera at a QR code</Text>
+      </SafeAreaView>
+    </View>
+  );
 
-        <View style={styles.footer}>
-          <Text style={styles.hint}>
-            Point camera at a QR code
-          </Text>
-        </View>
-      </View>
-    </AppModal>
+  // Native: fullscreen modal with dark status bar
+  if (Platform.OS !== 'web') {
+    return (
+      <Modal visible={visible} animationType="slide" statusBarTranslucent>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        {content}
+      </Modal>
+    );
+  }
+
+  // Web: use RN Modal — works on web and handles z-index/overlay correctly
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      {content}
+    </Modal>
   );
 }
 
-const FRAME_SIZE = 250;
-const CORNER_SIZE = 24;
+const FRAME_SIZE = 240;
+const CORNER_SIZE = 28;
+const CORNER_WIDTH = 3;
+const CORNER_RADIUS = 12;
 
 const styles = createStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: '#000',
   },
-  header: {
+
+  // Header + footer float on top of camera
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space['2xl'],
-    paddingTop: 60,
+    paddingHorizontal: space.xl,
     paddingBottom: space.xl,
+    zIndex: 10,
   },
   headerBtn: {
     width: 44,
@@ -278,10 +341,26 @@ const styles = createStyles(() => ({
     alignItems: 'center',
   },
   title: {
-    fontSize: text.xl,
+    fontSize: text.lg,
     ...inter.bold,
-    color: color.fg.inverse,
+    color: '#fff',
   },
+  footerOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingBottom: space.xl,
+    zIndex: 10,
+  },
+  hint: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  // Permission screen
   permissionContainer: {
     flex: 1,
     alignItems: 'center',
@@ -307,6 +386,8 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.fg.inverse,
   },
+
+  // Camera
   cameraContainer: {
     flex: 1,
     position: 'relative',
@@ -314,24 +395,15 @@ const styles = createStyles(() => ({
   camera: {
     flex: 1,
   },
+
+  // Overlay — centers the scan frame
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  overlayTop: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  overlayMiddle: {
-    flexDirection: 'row',
-    height: FRAME_SIZE,
-  },
-  overlaySide: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
+
+  // Scan frame — fixed square with corner brackets
   scanFrame: {
     width: FRAME_SIZE,
     height: FRAME_SIZE,
@@ -341,43 +413,36 @@ const styles = createStyles(() => ({
     position: 'absolute',
     width: CORNER_SIZE,
     height: CORNER_SIZE,
-    borderColor: color.accent.base,
+    borderColor: '#fff',
   },
   cornerTL: {
     top: 0, left: 0,
-    borderTopWidth: 3, borderLeftWidth: 3,
-    borderTopLeftRadius: 8,
+    borderTopWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH,
+    borderTopLeftRadius: CORNER_RADIUS,
   },
   cornerTR: {
     top: 0, right: 0,
-    borderTopWidth: 3, borderRightWidth: 3,
-    borderTopRightRadius: 8,
+    borderTopWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH,
+    borderTopRightRadius: CORNER_RADIUS,
   },
   cornerBL: {
     bottom: 0, left: 0,
-    borderBottomWidth: 3, borderLeftWidth: 3,
-    borderBottomLeftRadius: 8,
+    borderBottomWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH,
+    borderBottomLeftRadius: CORNER_RADIUS,
   },
   cornerBR: {
     bottom: 0, right: 0,
-    borderBottomWidth: 3, borderRightWidth: 3,
-    borderBottomRightRadius: 8,
+    borderBottomWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH,
+    borderBottomRightRadius: CORNER_RADIUS,
   },
-  overlayBottom: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: space.lg,
-    paddingBottom: space['2xl'],
-  },
-  hint: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    paddingHorizontal: space['5xl'],
+
+  // Animated scan line
+  scanLine: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 1,
   },
 }));
