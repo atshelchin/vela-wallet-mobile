@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { copyToClipboard } from '@/services/platform';
+import { copyToClipboard, openBrowser } from '@/services/platform';
+import { getAllNetworksSync } from '@/models/network';
 import { useWallet } from '@/models/wallet-state';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -15,7 +16,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
 import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
-import { Copy, Check, ArrowLeft } from 'lucide-react-native';
+import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
   const router = useSafeRouter();
@@ -193,6 +194,24 @@ export default function TokenDetailScreen() {
               </View>
             </>
           )}
+          <View style={styles.separator} />
+          <Pressable
+            style={styles.detailRow}
+            onPress={() => {
+              const net = getAllNetworksSync().find(n => n.chainId === chainId);
+              const base = net?.explorerURL ?? 'https://etherscan.io';
+              const url = contractAddress
+                ? `${base}/token/${contractAddress}?a=${walletAddress}`
+                : `${base}/address/${walletAddress}`;
+              openBrowser(url);
+            }}
+          >
+            <Text style={styles.detailLabel}>Transactions</Text>
+            <View style={styles.detailValueRow}>
+              <Text style={[styles.detailValue, { color: color.accent.base }]}>View on Explorer</Text>
+              <ExternalLink size={12} color={color.accent.base} strokeWidth={2} />
+            </View>
+          </Pressable>
         </Animated.View>
       </ScrollView>
     </ScreenContainer>
