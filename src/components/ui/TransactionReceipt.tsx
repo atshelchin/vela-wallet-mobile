@@ -360,15 +360,16 @@ export function TransactionReceipt({
       }
     } else {
       try {
-        const ViewShot = require('react-native-view-shot');
-        const { Share } = require('react-native');
+        const { captureRef } = await import('react-native-view-shot');
+        const Sharing = await import('expo-sharing');
         if (receiptRef.current) {
-          const uri = await ViewShot.captureRef(receiptRef, { format: 'png', quality: 1, result: 'tmpfile' });
-          await Share.share({ url: uri, message: `Sent ${amount} ${symbol} on ${chain}\n${explorerUrl}` });
+          const uri = await captureRef(receiptRef, { format: 'png', quality: 1, result: 'tmpfile' });
+          await Sharing.shareAsync(uri, { mimeType: 'image/png' });
         }
-      } catch {
-        const { Share } = require('react-native');
-        await Share.share({ message: `Sent ${amount} ${symbol} on ${chain}\n${explorerUrl}` });
+      } catch (e) {
+        console.warn('Share failed:', e);
+        await copyToClipboard(explorerUrl);
+        showAlert('Copied', 'Explorer link copied.');
       }
     }
   };
@@ -403,7 +404,7 @@ export function TransactionReceipt({
           <Text style={styles.qrHint}>Scan to view on explorer</Text>
         </View>
         <View style={styles.footer}>
-          <Image source={LOGO_ASSET} style={styles.footerLogoImg} />
+          <Image source={LOGO_ASSET} style={styles.footerLogoImg} resizeMode="contain" />
           <Text style={styles.footerLogo}>VELA WALLET</Text>
           <Text style={styles.footerUrl}>getvela.app</Text>
         </View>
