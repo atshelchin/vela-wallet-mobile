@@ -153,6 +153,7 @@ export default function HomeScreen() {
   const { activeAccount, state, dispatch } = useWallet();
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
+  const [debugBalance, setDebugBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -416,10 +417,20 @@ export default function HomeScreen() {
         </View>
       </Animated.View>
 
-      {/* Hero balance */}
-      <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
-        <AnimatedBalance value={totalUsd} />
-      </Animated.View>
+      {/* Hero balance — long press to cycle mock values (dev only) */}
+      <Pressable
+        onLongPress={() => {
+          if (!__DEV__) return;
+          const mocks = [0.42, 9.99, 150.50, 1234.56, 98765.43, 1234567.89, 12345678.90, 123456789.00, 1234567890.00, 12345678901.00, 123456789012.00, 1234567890123.00, 0];
+          const cur = mocks.findIndex(v => v === debugBalance);
+          setDebugBalance(mocks[(cur + 1) % mocks.length]!);
+        }}
+        delayLongPress={500}
+      >
+        <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
+          <AnimatedBalance value={debugBalance ?? totalUsd} />
+        </Animated.View>
+      </Pressable>
 
       {/* Action buttons */}
       <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
