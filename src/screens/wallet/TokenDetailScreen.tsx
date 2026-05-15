@@ -13,7 +13,8 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
 import { BarChart } from '@/components/ui/BarChart';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
-import { formatBalance, shortAddr } from '@/models/types';
+import { formatBalance, shortAddr, tokenChainId as networkToChainId } from '@/models/types';
+import type { APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
 import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
 import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
@@ -42,16 +43,7 @@ export default function TokenDetailScreen() {
   const network = params.network ?? '';
   const decimals = parseInt(params.decimals ?? '18', 10);
 
-  const chainIdMap: Record<string, number> = {
-    'eth-mainnet': 1,
-    'arb-mainnet': 42161,
-    'base-mainnet': 8453,
-    'opt-mainnet': 10,
-    'matic-mainnet': 137,
-    'bnb-mainnet': 56,
-    'avax-mainnet': 43114,
-  };
-  const chainId = chainIdMap[network] ?? 1;
+  const chainId = networkToChainId({ network } as APIToken);
   const chain = chainName(chainId);
 
   const formatUsd = (value: number) =>
