@@ -1,10 +1,10 @@
 /**
- * Transaction receipt — bank-receipt style card for confirmed transactions.
- * Supports screenshot (react-native-view-shot) and share.
+ * Transaction receipt — bank-receipt style full-screen view.
+ * Supports screenshot (react-native-view-shot / html2canvas) and share.
  */
 
 import React, { useRef } from 'react';
-import { Platform, View, Text, Pressable } from 'react-native';
+import { Platform, View, Text, Pressable, ScrollView } from 'react-native';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { TokenLogo } from '@/components/TokenLogo';
 import { ChainLogo } from '@/components/ChainLogo';
@@ -12,7 +12,7 @@ import { QRCode } from '@/components/QRCode';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { copyToClipboard, hapticSuccess, showAlert } from '@/services/platform';
-import { Check, Copy, Share2, Link } from 'lucide-react-native';
+import { Check, Link, Share2, ArrowLeft } from 'lucide-react-native';
 import type { RecipientIdentity } from '@/services/recipient-identity';
 
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
   usdValue?: number;
   timestamp: Date;
   recipientIdentity?: RecipientIdentity | null;
+  onDone: () => void;
 }
 
 function formatTime(d: Date): string {
@@ -43,13 +44,14 @@ function formatUsd(value: number): string {
 
 export function TransactionReceipt({
   from, fromName, to, toName, amount, symbol, chainId,
-  txHash, logoUrls, usdValue, timestamp, recipientIdentity,
+  txHash, logoUrls, usdValue, timestamp, recipientIdentity, onDone,
 }: Props) {
   const receiptRef = useRef<View>(null);
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
   const explorerBase = net?.explorerURL ?? 'https://etherscan.io';
   const explorerUrl = `${explorerBase}/tx/${txHash}`;
+  const displayToName = recipientIdentity?.name ?? toName;
 
   const [copiedLink, setCopiedLink] = React.useState(false);
 
@@ -62,22 +64,40 @@ export function TransactionReceipt({
 
   const handleShare = async () => {
     if (Platform.OS === 'web') {
-      // Web: try navigator.share, fallback to copy
-      if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        const html2canvas = (await import('html2canvas')).default;
+        const el = document.querySelector(`[data-testid="receipt-card"]`);
+        if (!el) throw new Error('not found');
+
+        const canvas = await html2canvas(el as HTMLElement, {
+          backgroundColor: '#FFFFFF',
+          scale: 2,
+          useCORS: true,
+        });
+
         try {
-          await navigator.share({
-            title: `Sent ${amount} ${symbol}`,
-            text: `Sent ${amount} ${symbol} to ${toName ?? shortAddr(to)} on ${chain}`,
-            url: explorerUrl,
-          });
+          const blob = await new Promise<Blob>((resolve, reject) =>
+            canvas.toBlob(b => b ? resolve(b) : reject(), 'image/png'),
+          );
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob }),
+          ]);
+          hapticSuccess();
+          showAlert('Copied', 'Receipt image copied to clipboard.');
           return;
-        } catch { /* cancelled or unsupported */ }
+        } catch { /* fallback to download */ }
+
+        const link = document.createElement('a');
+        link.download = `vela-receipt-${txHash.slice(0, 10)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        hapticSuccess();
+      } catch {
+        await copyToClipboard(explorerUrl);
+        hapticSuccess();
+        showAlert('Copied', 'Explorer link copied to clipboard.');
       }
-      await copyToClipboard(explorerUrl);
-      hapticSuccess();
-      showAlert('Copied', 'Explorer link copied to clipboard.');
     } else {
-      // Native: use react-native-view-shot to capture receipt, then share
       try {
         const ViewShot = require('react-native-view-shot');
         const { Share } = require('react-native');
@@ -93,7 +113,6 @@ export function TransactionReceipt({
           });
         }
       } catch {
-        // Fallback: share text only
         const { Share } = require('react-native');
         await Share.share({
           message: `Sent ${amount} ${symbol} to ${toName ?? shortAddr(to)} on ${chain}\n${explorerUrl}`,
@@ -102,12 +121,10 @@ export function TransactionReceipt({
     }
   };
 
-  const displayToName = recipientIdentity?.name ?? toName;
-
   return (
-    <View>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
       {/* Capturable receipt card */}
-      <View ref={receiptRef} collapsable={false} style={styles.receipt}>
+      <View ref={receiptRef} testID="receipt-card" collapsable={false} style={styles.receipt}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Transaction Receipt</Text>
@@ -121,7 +138,7 @@ export function TransactionReceipt({
 
         {/* Amount hero */}
         <View style={styles.amountSection}>
-          <TokenLogo symbol={symbol} logoUrls={logoUrls} size={40} />
+          <TokenLogo symbol={symbol} logoUrls={logoUrls} size={44} />
           <Text style={styles.amountText}>{formatBalance(parseFloat(amount))} {symbol}</Text>
           {usdValue != null && usdValue > 0 && (
             <Text style={styles.amountUsd}>{formatUsd(usdValue)}</Text>
@@ -162,15 +179,16 @@ export function TransactionReceipt({
           <Text style={styles.detailAddr}>{shortAddr(txHash)}</Text>
         </View>
 
-        {/* QR code → scan to view on explorer */}
+        {/* QR code */}
         <View style={styles.qrSection}>
           <QRCode value={explorerUrl} size={80} />
           <Text style={styles.qrHint}>Scan to view on explorer</Text>
         </View>
 
-        {/* Branding footer */}
+        {/* Branding footer — logo + website */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Vela Wallet</Text>
+          <Text style={styles.footerLogo}>VELA WALLET</Text>
+          <Text style={styles.footerUrl}>getvela.app</Text>
         </View>
       </View>
 
@@ -178,23 +196,36 @@ export function TransactionReceipt({
       <View style={styles.actions}>
         <Pressable style={styles.actionBtn} onPress={handleCopyLink}>
           {copiedLink ? (
-            <Check size={16} color={color.success.base} strokeWidth={2.5} />
+            <Check size={18} color={color.success.base} strokeWidth={2.5} />
           ) : (
-            <Link size={16} color={color.fg.muted} strokeWidth={2} />
+            <Link size={18} color={color.fg.muted} strokeWidth={2} />
           )}
           <Text style={styles.actionText}>{copiedLink ? 'Copied' : 'Copy Link'}</Text>
         </Pressable>
 
         <Pressable style={styles.actionBtn} onPress={handleShare}>
-          <Share2 size={16} color={color.fg.muted} strokeWidth={2} />
+          <Share2 size={18} color={color.fg.muted} strokeWidth={2} />
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
       </View>
-    </View>
+
+      {/* Done button */}
+      <Pressable style={styles.doneBtn} onPress={onDone}>
+        <Text style={styles.doneBtnText}>Done</Text>
+      </Pressable>
+    </ScrollView>
   );
 }
 
 const styles = createStyles(() => ({
+  screen: {
+    flex: 1,
+    backgroundColor: color.bg.base,
+  },
+  screenContent: {
+    padding: space.xl,
+    paddingBottom: 100,
+  },
   receipt: {
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
@@ -206,7 +237,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: space.lg,
+    marginBottom: space.md,
   },
   headerTitle: {
     fontSize: text.sm,
@@ -233,13 +264,14 @@ const styles = createStyles(() => ({
   amountSection: {
     alignItems: 'center',
     gap: space.sm,
-    paddingVertical: space.md,
+    paddingVertical: space.lg,
   },
   amountText: {
     fontSize: text['3xl'],
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
+    marginTop: space.sm,
   },
   amountUsd: {
     fontSize: text.base,
@@ -297,28 +329,45 @@ const styles = createStyles(() => ({
   },
   footer: {
     alignItems: 'center',
-    marginTop: space.lg,
+    marginTop: space.xl,
+    gap: 2,
   },
-  footerText: {
-    fontSize: text.xs,
-    ...inter.semibold,
-    color: color.fg.subtle,
+  footerLogo: {
+    fontSize: text.sm,
+    ...inter.bold,
+    color: color.fg.muted,
     letterSpacing: 2,
-    textTransform: 'uppercase' as const,
+  },
+  footerUrl: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: space['3xl'],
-    marginTop: space.xl,
+    gap: space['5xl'],
+    marginTop: space['2xl'],
   },
   actionBtn: {
     alignItems: 'center',
-    gap: space.xs,
+    gap: space.sm,
   },
   actionText: {
-    fontSize: text.xs,
+    fontSize: text.sm,
     ...inter.medium,
     color: color.fg.muted,
+  },
+  doneBtn: {
+    backgroundColor: color.fg.base,
+    borderRadius: radius.xl,
+    paddingVertical: space.xl,
+    alignItems: 'center',
+    marginTop: space['2xl'],
+  },
+  doneBtnText: {
+    fontSize: text.lg,
+    ...inter.semibold,
+    color: color.fg.inverse,
   },
 }));

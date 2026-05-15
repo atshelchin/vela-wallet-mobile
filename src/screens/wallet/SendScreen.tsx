@@ -958,6 +958,7 @@ export default function SendScreen() {
                   usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
                   timestamp={new Date()}
                   recipientIdentity={recipientIdentity}
+                  onDone={() => router.back()}
                 />
               )}
               {txStatus === 'error' && (
@@ -966,21 +967,14 @@ export default function SendScreen() {
                   <Text style={styles.txStatusError}>{txError}</Text>
                 </View>
               )}
-              {(txStatus === 'confirmed' || txStatus === 'error') && (
+              {txStatus === 'error' && (
                 <View style={styles.txStatusActions}>
-                  {txStatus === 'confirmed' && (
-                    <Pressable style={styles.txDoneBtn} onPress={() => router.back()}>
-                      <Text style={styles.txDoneBtnText}>Done</Text>
-                    </Pressable>
-                  )}
-                  {txStatus === 'error' && (
-                    <Pressable
-                      style={styles.txRetryBtn}
-                      onPress={() => { setTxStatus('idle'); setTxError(null); }}
-                    >
-                      <Text style={styles.txRetryBtnText}>Try Again</Text>
-                    </Pressable>
-                  )}
+                  <Pressable
+                    style={styles.txRetryBtn}
+                    onPress={() => { setTxStatus('idle'); setTxError(null); }}
+                  >
+                    <Text style={styles.txRetryBtnText}>Try Again</Text>
+                  </Pressable>
                 </View>
               )}
             </Animated.View>
