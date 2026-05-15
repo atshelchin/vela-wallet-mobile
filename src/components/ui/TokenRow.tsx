@@ -1,13 +1,13 @@
+import { TokenLogo } from '@/components/TokenLogo';
+import { fadeIn } from '@/constants/entering';
+import { color, createStyles, font, inter, motion, radius, space, text } from '@/constants/theme';
 import React, { useCallback } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { fadeIn } from '@/constants/entering';
-import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
 
 interface Props {
   symbol: string;
@@ -66,7 +66,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
+    paddingHorizontal: space.sm,
     gap: space.lg,
     borderRadius: radius.lg,
   },
