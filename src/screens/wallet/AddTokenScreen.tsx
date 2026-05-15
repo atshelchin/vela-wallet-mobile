@@ -14,7 +14,7 @@ import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import { rpcCall } from '@/services/rpc-adapter';
-import { loadCustomNetworks, loadCustomTokens, saveCustomNetwork, saveCustomToken } from '@/services/storage';
+import { loadCustomNetworks, loadCustomTokens, saveCustomNetwork, saveCustomToken, getBundlerServiceURL } from '@/services/storage';
 import { ArrowLeft, Check, ChevronDown, Globe, ScanLine, Search, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -240,7 +240,7 @@ export default function AddTokenScreen() {
         isL2: false,
         rpcURL: netCompat.bestRpcUrl ?? netChainInfo.rpcUrl ?? '',
         explorerURL: netChainInfo.explorerUrl ?? '',
-        bundlerURL: `https://bundler.getvela.app/${netChainInfo.chainId}`,
+        bundlerURL: `${getBundlerServiceURL()}/${netChainInfo.chainId}`,
         nativeSymbol: netChainInfo.nativeCurrency?.symbol ?? 'ETH',
         addedAt: new Date().toISOString(),
       };

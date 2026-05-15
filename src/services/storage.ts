@@ -254,6 +254,14 @@ export function getEthereumDataURL(): string {
   return _endpointsCache.ethereumDataURL || DEFAULT_SERVICE_ENDPOINTS.ethereumDataURL;
 }
 
+/**
+ * Synchronous getter for the bundler service base URL.
+ * Returns the user-configured value if available, otherwise the default.
+ */
+export function getBundlerServiceURL(): string {
+  return _endpointsCache.bundlerServiceURL || DEFAULT_SERVICE_ENDPOINTS.bundlerServiceURL;
+}
+
 // ---------------------------------------------------------------------------
 // Price Source
 // ---------------------------------------------------------------------------

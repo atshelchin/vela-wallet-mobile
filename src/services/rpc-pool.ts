@@ -10,6 +10,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getBundlerServiceURL } from './storage';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import { fetchChainInfo } from './chain-registry';
 import { getNetworkConfig } from './storage';
@@ -122,8 +123,8 @@ export function getFailedRpcChains(): ReadonlySet<number> {
   return rpcFailedChains;
 }
 
-/** Built-in bundler base URL */
-const BUILTIN_BUNDLER = 'https://bundler.getvela.app';
+/** Built-in bundler base URL (reads user config, falls back to default) */
+const getBuiltinBundler = () => getBundlerServiceURL();
 
 /** Reliable public RPCs per chain (curated, known to work without auth). */
 const PUBLIC_RPCS: Record<number, string[]> = {
@@ -280,7 +281,7 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
   }
 
   // 3. Built-in vela bundler (always available as fallback)
-  add(`${BUILTIN_BUNDLER}/${chainId}`, 'builtin');
+  add(`${getBuiltinBundler()}/${chainId}`, 'builtin');
 
   return entries;
 }
@@ -662,16 +663,17 @@ export async function isUsingBuiltinBundler(chainId: number): Promise<boolean> {
   await ensurePool(chainId);
   const pool = bundlerPools.get(chainId) ?? [];
   // Check if any healthy non-vela bundler exists.
-  // User-configured endpoints pointing at bundler.getvela.app still count as built-in.
+  // User-configured endpoints pointing at the built-in bundler still count as built-in.
+  const builtinHost = getBuiltinBundler();
   const externalEndpoints = pool.filter(
-    e => e.source === 'user' && e.consecutiveFailures === 0 && !e.url.includes('bundler.getvela.app'),
+    e => e.source === 'user' && e.consecutiveFailures === 0 && !e.url.includes(builtinHost),
   );
   return externalEndpoints.length === 0;
 }
 
 /** Get the built-in bundler base URL (for REST API calls). */
 export function getBuiltinBundlerUrl(): string {
-  return BUILTIN_BUNDLER;
+  return getBuiltinBundler();
 }
 
 /** Get the best RPC URL for a chain (for passing to bundler via X-Rpc-Url). */

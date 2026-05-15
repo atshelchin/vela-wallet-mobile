@@ -19,7 +19,7 @@ import { useColorSchemePreference, type ColorSchemePreference } from '@/constant
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
-import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads } from '@/services/storage';
+import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads, getBundlerServiceURL } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { refreshPool } from '@/services/rpc-pool';
 import { clearBundlerCache } from '@/services/bundler-service';
@@ -597,7 +597,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
         isL2: false,
         rpcURL: compatResult.bestRpcUrl ?? chainInfo.rpcUrl, // Use the fastest RPC
         explorerURL: chainInfo.explorerUrl,
-        bundlerURL: `https://bundler.getvela.app/${chainInfo.chainId}`,
+        bundlerURL: `${getBundlerServiceURL()}/${chainInfo.chainId}`,
         nativeSymbol: chainInfo.nativeCurrency.symbol,
         addedAt: new Date().toISOString(),
       };
