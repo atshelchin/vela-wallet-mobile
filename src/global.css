@@ -4,9 +4,12 @@ input, textarea, [contenteditable] {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Prevent iOS Safari auto-zoom on input focus */
+/* Prevent iOS Safari auto-zoom on input focus (requires fontSize >= 16px).
+   Exclude amount-input which uses dynamic fontSize (already >= 17px). */
 @supports (-webkit-touch-callout: none) {
-  input, textarea, select {
+  input:not([data-testid="amount-input"]),
+  textarea:not([data-testid="amount-input"]),
+  select {
     font-size: 16px !important;
   }
 }

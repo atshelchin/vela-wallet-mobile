@@ -648,6 +648,7 @@ export default function SendScreen() {
               <View style={styles.amountInputWrap}>
                 <TextInput
                   ref={amountInputRef}
+                  testID="amount-input"
                   style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
                   placeholder="0"
                   placeholderTextColor={color.fg.subtle}
