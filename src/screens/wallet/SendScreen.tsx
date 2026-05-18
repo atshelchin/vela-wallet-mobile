@@ -768,11 +768,19 @@ export default function SendScreen() {
             </VelaCard>
           )}
 
+          {fundingNeeded?.reason === 'wallet_balance_too_low' && (
+            <View style={styles.lowBalanceWarning}>
+              <Text style={styles.lowBalanceText}>
+                Insufficient balance to cover network fees. Add more {fundingNeeded.nativeSym} to your wallet before sending.
+              </Text>
+            </View>
+          )}
+
           <VelaButton
             title="Continue"
             onPress={handleContinue}
             style={styles.continueBtn}
-            disabled={!recipient || !amount}
+            disabled={!recipient || !amount || fundingNeeded?.reason === 'wallet_balance_too_low'}
           />
         </Animated.View>
       </ScrollView>
@@ -1015,7 +1023,7 @@ export default function SendScreen() {
         onClose={() => setShowScanner(false)}
       />
 
-      {fundingNeeded && (
+      {fundingNeeded && fundingNeeded.reason !== 'wallet_balance_too_low' && (
         <BundlerFundingModal
           visible={!!fundingNeeded}
           funding={fundingNeeded}
@@ -1315,6 +1323,19 @@ const styles = createStyles(() => ({
   },
   continueBtn: {
     marginTop: space.lg,
+  },
+  lowBalanceWarning: {
+    backgroundColor: color.warning.soft,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    marginTop: space.lg,
+  },
+  lowBalanceText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.warning.base,
+    lineHeight: 20,
+    textAlign: 'center' as const,
   },
 
   // Confirm — transfer flow card

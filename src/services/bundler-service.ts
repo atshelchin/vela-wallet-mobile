@@ -36,6 +36,8 @@ export interface BundlerAccountInfo {
 }
 
 export interface FundingNeeded {
+  /** Why funding is needed. */
+  reason: 'deposit_needed' | 'wallet_balance_too_low';
   /** Deposit address for the bundler EOA. */
   depositAddress: string;
   /** The Safe wallet address (needed to re-query bundler API). */
@@ -109,6 +111,7 @@ export async function checkBundlerFunding(
 
   // Attempt auto-sponsorship from treasury before prompting user.
   // The bundler will check eligibility (nonce, WebAuthn registration, etc.)
+  let sponsorReason: string | undefined;
   try {
     const sponsorResult = await requestSponsorship(chainId, safeAddress, threshold);
     console.log(`[BundlerFunding] sponsorship result:`, sponsorResult);
@@ -121,17 +124,23 @@ export async function checkBundlerFunding(
         return null;
       }
     }
+    sponsorReason = sponsorResult.reason;
   } catch (err) {
     console.warn(`[BundlerFunding] Sponsorship request failed, falling back to manual:`, err);
   }
 
-  // Recommend the amount needed plus 20% buffer so the user doesn't need
-  // to top up again immediately for the next transaction.
   const deficit = threshold - info.spendableBalance;
   const base = deficit > 0n ? deficit : threshold;
   const recommendedWei = (base * 12n) / 10n;
 
+  // If the user's wallet balance is too low, don't show the deposit modal —
+  // they can't afford the transaction anyway.
+  const reason: FundingNeeded['reason'] = sponsorReason === 'wallet_balance_too_low'
+    ? 'wallet_balance_too_low'
+    : 'deposit_needed';
+
   return {
+    reason,
     depositAddress: info.depositAddress,
     safeAddress,
     chainId,
