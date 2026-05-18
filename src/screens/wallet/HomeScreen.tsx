@@ -398,7 +398,6 @@ export default function HomeScreen() {
           <Pressable
             style={styles.accountChip}
             onPress={state.accounts.length > 1 ? openAccountSwitcher : copyAddress}
-            onLongPress={copyAddress}
           >
             <View style={styles.accountAvatar}>
               <Text style={styles.accountAvatarText}>
@@ -409,15 +408,18 @@ export default function HomeScreen() {
               <Text style={styles.accountName}>{accountName}</Text>
               <View style={styles.addrRow}>
                 <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-                {copied ? (
-                  <Check size={10} color={color.accent.base} strokeWidth={3} />
-                ) : state.accounts.length > 1 ? (
+                {state.accounts.length > 1 && (
                   <ChevronDown size={10} color={color.fg.subtle} strokeWidth={2.5} />
-                ) : (
-                  <Copy size={10} color={color.fg.subtle} strokeWidth={2} />
                 )}
               </View>
             </View>
+          </Pressable>
+          <Pressable onPress={copyAddress} hitSlop={6} style={styles.copyBtn}>
+            {copied ? (
+              <Check size={14} color={color.accent.base} strokeWidth={3} />
+            ) : (
+              <Copy size={14} color={color.fg.subtle} strokeWidth={2} />
+            )}
           </Pressable>
         </View>
       </Animated.View>
@@ -735,7 +737,13 @@ const styles = createStyles(() => ({
 
   // Account chip
   accountChipWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+  },
+  copyBtn: {
+    padding: space.xs,
   },
   accountChip: {
     flexDirection: 'row',
