@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -61,31 +61,18 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>>(0 as any);
-
-  const scan = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA || scanned) return;
-
-    const ctx = canvas.getContext('2d')!;
-    // Scan at reduced resolution for performance
-    const w = Math.min(video.videoWidth, 640);
-    const h = Math.round(w * (video.videoHeight / video.videoWidth));
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-    const imageData = ctx.getImageData(0, 0, w, h);
-    const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
-      inversionAttempts: 'dontInvert',
-    });
-    if (code?.data) {
-      onScan(code.data);
-    }
-  }, [onScan, scanned]);
+  // Use refs so the interval callback always sees latest values without re-creating
+  const scannedRef = useRef(scanned);
+  const onScanRef = useRef(onScan);
+  scannedRef.current = scanned;
+  onScanRef.current = onScan;
 
   useEffect(() => {
     let mounted = true;
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+    })
       .then(stream => {
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
@@ -96,15 +83,34 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       })
       .catch(() => {});
 
-    // Scan every 200ms instead of every frame — much better performance
-    timerRef.current = setInterval(scan, 200);
+    // Stable interval — reads refs, never needs to be re-created
+    timerRef.current = setInterval(() => {
+      if (scannedRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+      const ctx = canvas.getContext('2d')!;
+      const w = Math.min(video.videoWidth, 480);
+      const h = Math.round(w * (video.videoHeight / video.videoWidth));
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert',
+      });
+      if (code?.data) {
+        onScanRef.current(code.data);
+      }
+    }, 300);
 
     return () => {
       mounted = false;
       clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
-  }, [scan]);
+  }, []); // stable — no deps, runs once
 
   return (
     <View style={styles.cameraContainer}>
@@ -125,9 +131,10 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 // Native camera component using expo-camera
 // ---------------------------------------------------------------------------
 
-function NativeCamera({ facing, onBarCodeScanned }: {
+function NativeCamera({ facing, onBarCodeScanned, active }: {
   facing: 'back' | 'front';
   onBarCodeScanned: (result: { data: string }) => void;
+  active: boolean;
 }) {
   const { CameraView, useCameraPermissions } = require('expo-camera');
   const [permission, requestPermission] = useCameraPermissions();
@@ -152,7 +159,7 @@ function NativeCamera({ facing, onBarCodeScanned }: {
         style={styles.camera}
         facing={facing}
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={onBarCodeScanned}
+        onBarcodeScanned={active ? onBarCodeScanned : undefined}
       />
       <ScanOverlay />
     </View>
@@ -208,14 +215,28 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         try {
           const file = input.files?.[0];
           if (!file) return;
-          const bitmap = await createImageBitmap(file);
+
+          // Load image via HTMLImageElement (universally supported)
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = url;
+          });
+
           const maxDim = 1024;
-          const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-          const w = Math.round(bitmap.width * scale);
-          const h = Math.round(bitmap.height * scale);
-          const canvas = new OffscreenCanvas(w, h);
+          const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.round(img.naturalWidth * scale);
+          const h = Math.round(img.naturalHeight * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
           const ctx = canvas.getContext('2d')!;
-          ctx.drawImage(bitmap, 0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+
           const imageData = ctx.getImageData(0, 0, w, h);
           const code = jsQR(imageData.data as any, imageData.width, imageData.height);
           if (code?.data) {
@@ -289,7 +310,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       {Platform.OS === 'web' ? (
         <WebCamera onScan={(data) => handleBarCodeScanned({ data })} scanned={scanned} />
       ) : (
-        <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} />
+        <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} active={!scanned} />
       )}
 
       {/* Header overlay — manual safe area padding */}
