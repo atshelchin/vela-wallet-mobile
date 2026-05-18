@@ -139,7 +139,7 @@ Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a 
 Each transaction incurs a gas fee that is deducted from **your Safe wallet's native token balance** (ETH, BNB, etc.). The fee consists of:
 
 - **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
-- **Relayer service fee** — A ~30% markup over the on-chain gas price (`maxFeePerGas = gasPrice × 1.3`). This covers the bundler's operating costs.
+- **Relayer service fee** — A ~60% markup over the on-chain gas price (`maxFeePerGas = gasPrice × 1.6`). This covers the bundler's operating costs.
 
 The total estimated fee is shown on the confirmation screen with a full breakdown: on-chain gas price, UserOp gas price, gas limit, fee in native tokens, and fee in USD.
 
