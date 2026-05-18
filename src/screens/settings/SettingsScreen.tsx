@@ -1080,7 +1080,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
             })()}
             <VelaCard style={{ padding: 0 }}>
               {balances.map((b, i) => {
-                const needsFunding = !b.loading && b.wei < b.recommendedWei;
+                const needsFunding = !b.loading && (b.wei < b.recommendedWei || (b.wei === 0n && b.recommendedWei === 0n));
                 const explorerLink = `${b.explorerURL}/address/${address}`;
                 return (
                   <View key={b.chainId}>
@@ -1093,7 +1093,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
                           <Text style={{ fontSize: text.sm, ...inter.medium, color: color.fg.base }}>{b.name}</Text>
                           <ExternalLink size={10} color={color.fg.subtle} strokeWidth={2} />
                         </View>
-                        {!b.loading && needsFunding && (
+                        {!b.loading && needsFunding && b.recommendedWei > 0n && (
                           <Text style={{ fontSize: text.xs, ...inter.regular, color: color.fg.muted, marginTop: 2 }}>
                             min {b.recommended}
                           </Text>
