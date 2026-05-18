@@ -198,12 +198,12 @@ export async function fetch7DayHistory(params: {
 
   const now = new Date();
 
-  // Generate midnight timestamps for the past 7 days
+  // Generate end-of-day timestamps for the past 7 days
   const midnights: { date: Date; targetTs: number }[] = [];
   for (let i = 7; i >= 1; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    d.setHours(0, 0, 0, 0);
+    d.setHours(23, 59, 59, 0);
     midnights.push({ date: d, targetTs: Math.floor(d.getTime() / 1000) });
   }
 
