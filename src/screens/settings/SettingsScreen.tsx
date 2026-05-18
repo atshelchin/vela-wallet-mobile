@@ -23,6 +23,8 @@ import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServic
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { refreshPool, invalidateAllPools } from '@/services/rpc-pool';
 import { clearBundlerCache } from '@/services/bundler-service';
+import { fetchTokens } from '@/services/wallet-api';
+import { isNativeToken, tokenChainId } from '@/models/types';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor, Copy, Key } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
@@ -933,7 +935,7 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
 // Treasury (Developer Options)
 // ---------------------------------------------------------------------------
 
-type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; recommended: string; recommendedWei: bigint; loading: boolean };
+type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; recommended: string; recommendedWei: bigint; usd: number | null; loading: boolean };
 
 function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
@@ -942,21 +944,40 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const { activeAccount } = useWallet();
+
   const loadBalances = useCallback(async (addr: string) => {
     const networks = DEFAULT_NETWORKS;
     const initial: TreasuryBalance[] = networks.map(n => ({
       chainId: n.chainId, name: n.displayName, explorerURL: n.explorerURL,
-      balance: '...', wei: 0n, recommended: '...', recommendedWei: 0n, loading: true,
+      balance: '...', wei: 0n, recommended: '...', recommendedWei: 0n, usd: null, loading: true,
     }));
     setBalances(initial);
+
+    // Get native token prices from the existing token cache
+    const nativePrices = new Map<number, number>();
+    if (activeAccount?.address) {
+      try {
+        const tokens = await fetchTokens(activeAccount.address);
+        for (const t of tokens) {
+          if (isNativeToken(t) && t.priceUsd) {
+            nativePrices.set(tokenChainId(t), t.priceUsd);
+          }
+        }
+      } catch { /* prices are optional */ }
+    }
+
     for (const net of networks) {
       fetchTreasuryBalance(addr, net.chainId).then(result => {
+        const price = nativePrices.get(net.chainId);
+        const ethValue = Number(result.wei) / 1e18;
+        const usd = price ? ethValue * price : null;
         setBalances(prev => prev.map(b =>
-          b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, recommended: result.recommendedFormatted, recommendedWei: result.recommendedWei, loading: false } : b
+          b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, recommended: result.recommendedFormatted, recommendedWei: result.recommendedWei, usd, loading: false } : b
         ));
       });
     }
-  }, []);
+  }, [activeAccount?.address]);
 
   useEffect(() => {
     if (!visible) return;
@@ -1040,10 +1061,23 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
               </Text>
             </Pressable>
 
-            {/* Balances per chain */}
-            <Text style={{ fontSize: text.sm, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm }}>
-              Balances
-            </Text>
+            {/* Total USD */}
+            {(() => {
+              const totalUsd = balances.reduce((sum, b) => sum + (b.usd ?? 0), 0);
+              const anyLoading = balances.some(b => b.loading);
+              return (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg }}>
+                  <Text style={{ fontSize: text.sm, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Balances
+                  </Text>
+                  {!anyLoading && totalUsd > 0 && (
+                    <Text style={{ fontSize: text.sm, ...inter.bold, color: color.fg.base }}>
+                      ${totalUsd < 0.01 ? totalUsd.toFixed(4) : totalUsd.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
             <VelaCard style={{ padding: 0 }}>
               {balances.map((b, i) => {
                 const needsFunding = !b.loading && b.wei < b.recommendedWei;
@@ -1068,16 +1102,23 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
                       {b.loading ? (
                         <ActivityIndicator size="small" color={color.fg.subtle} />
                       ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                          {needsFunding && (
-                            <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                            {needsFunding && (
+                              <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
+                            )}
+                            <Text style={{
+                              fontSize: text.sm, ...inter.semibold, fontFamily: font.mono,
+                              color: needsFunding ? color.warning.base : color.fg.base,
+                            }}>
+                              {b.balance}
+                            </Text>
+                          </View>
+                          {b.usd != null && b.usd > 0 && (
+                            <Text style={{ fontSize: text.xs, ...inter.regular, color: color.fg.muted }}>
+                              ${b.usd < 0.01 ? b.usd.toFixed(4) : b.usd.toFixed(2)}
+                            </Text>
                           )}
-                          <Text style={{
-                            fontSize: text.sm, ...inter.semibold, fontFamily: font.mono,
-                            color: needsFunding ? color.warning.base : color.fg.base,
-                          }}>
-                            {b.balance}
-                          </Text>
                         </View>
                       )}
                     </Pressable>
