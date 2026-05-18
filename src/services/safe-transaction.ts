@@ -206,8 +206,7 @@ export async function estimateTransactionFee(
   // Layer 1: bundler gas price = raw × tier multiplier (what bundler actually pays)
   const m = GAS_TIER_MULTIPLIERS[tier];
   let bundlerGasPrice = (onChainGasPrice * m.num) / m.den;
-  const MIN_FEE = 1_000n;
-  if (bundlerGasPrice < MIN_FEE) bundlerGasPrice = MIN_FEE;
+  if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
 
   // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.6 (60% bundler profit margin)
   const userOpMaxFee = (bundlerGasPrice * 16n) / 10n;
@@ -759,9 +758,10 @@ async function getGasPrices(
       // Poly: gasPrice≈50gwei → maxFee=80gwei
       let maxFee = (gasPrice * 16n) / 10n;
 
-      // Floor: 0.001 gwei to prevent zero-fee edge cases
-      const MIN_FEE = 1_000_000n;
-      if (maxFee < MIN_FEE) maxFee = MIN_FEE;
+      // Floor: 1 wei — only prevents literal zero. Chains like Gnosis have
+      // legitimate gas prices as low as ~200 wei; any higher floor inflates
+      // the UserOp maxFeePerGas and causes the bundler EOA to run out of balance.
+      if (maxFee < 1n) maxFee = 1n;
 
       console.log(`[UserOp] Gas: gasPrice=${gasPrice} → maxFee=${maxFee} (×1.6)`);
       const result = { maxFee, maxPriority: maxFee };
