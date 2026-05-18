@@ -515,6 +515,7 @@ export async function poolRpcCall(
   method: string,
   params: any[],
   chainId: number,
+  retried = false,
 ): Promise<RPCResponse> {
   await ensurePool(chainId);
 
@@ -575,6 +576,14 @@ export async function poolRpcCall(
     }
   }
 
+  // All endpoints failed on first pass — retry once after a short delay
+  // to recover from transient network glitches (CDN 502s, DNS hiccups).
+  if (!retried) {
+    console.warn(`[RPC] All endpoints failed for chain ${chainId}, retrying in 1s...`);
+    await new Promise(r => setTimeout(r, 1000));
+    return poolRpcCall(method, params, chainId, true);
+  }
+
   rpcFailedChains.add(chainId);
   throw new Error(`All RPC endpoints failed for chain ${chainId}`);
 }
@@ -587,6 +596,7 @@ export async function poolBundlerCall(
   method: string,
   params: any[],
   chainId: number,
+  retried = false,
 ): Promise<RPCResponse> {
   await ensurePool(chainId);
 
@@ -646,6 +656,12 @@ export async function poolBundlerCall(
         console.warn(`[Bundler] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+  }
+
+  if (!retried) {
+    console.warn(`[Bundler] All endpoints failed for chain ${chainId}, retrying in 1s...`);
+    await new Promise(r => setTimeout(r, 1000));
+    return poolBundlerCall(method, params, chainId, true);
   }
 
   throw new Error(`All bundler endpoints failed for chain ${chainId}`);
