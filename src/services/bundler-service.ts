@@ -12,6 +12,7 @@
 
 import { isUsingBuiltinBundler, getBuiltinBundlerUrl, poolRpcCall, getChainRpcUrl } from './rpc-pool';
 import { nativeSymbol } from '@/models/network';
+import { loadServiceEndpoints } from './storage';
 
 /** Timeout for bundler REST API calls. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -74,6 +75,14 @@ const MIN_BALANCE_WEI = BigInt('100000000000000'); // 0.0001 ETH
 const infoCache = new Map<string, { info: BundlerAccountInfo; at: number }>();
 const INFO_CACHE_TTL = 30_000; // 30s
 
+/** Ensure user-configured endpoints are loaded so getBuiltinBundlerUrl() returns the right URL. */
+let _endpointsReady = false;
+async function ensureEndpoints(): Promise<void> {
+  if (_endpointsReady) return;
+  await loadServiceEndpoints();
+  _endpointsReady = true;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -89,7 +98,7 @@ export async function checkBundlerFunding(
   safeAddress: string,
   estimatedGasCostWei?: bigint,
 ): Promise<FundingNeeded | null> {
-  // Skip check if user has their own bundler (not vela bundler)
+  await ensureEndpoints();
   const builtin = await isUsingBuiltinBundler(chainId);
   console.log(`[BundlerFunding] chain=${chainId} isVelaBundler=${builtin}`);
   if (!builtin) return null;
@@ -164,6 +173,7 @@ async function requestSponsorship(
   requiredWei: bigint,
 ): Promise<{ sponsored: boolean; reason?: string }> {
   try {
+    await ensureEndpoints();
     const baseUrl = getBuiltinBundlerUrl();
     const url = `${baseUrl}/v1/sponsor/${chainId}/${safeAddress.toLowerCase()}`;
 
@@ -202,6 +212,7 @@ export async function fetchBundlerAccountInfo(
   chainId: number,
   safeAddress: string,
 ): Promise<BundlerAccountInfo | null> {
+  await ensureEndpoints();
   const key = `${chainId}:${safeAddress.toLowerCase()}`;
   const cached = infoCache.get(key);
   if (cached && Date.now() - cached.at < INFO_CACHE_TTL) return cached.info;
