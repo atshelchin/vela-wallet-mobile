@@ -17,7 +17,7 @@ import { color, text, inter, space, radius, font, shadow, useStyles } from '@/co
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
-import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
+import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads, getBundlerServiceURL } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
@@ -947,7 +947,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
   const { activeAccount } = useWallet();
 
   const loadBalances = useCallback(async (addr: string) => {
-    const networks = DEFAULT_NETWORKS;
+    const networks = getAllNetworksSync();
     const initial: TreasuryBalance[] = networks.map(n => ({
       chainId: n.chainId, name: n.displayName, explorerURL: n.explorerURL,
       balance: '...', wei: 0n, recommended: '...', recommendedWei: 0n, usd: null, loading: true,
