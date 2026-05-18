@@ -933,7 +933,7 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
 // Treasury (Developer Options)
 // ---------------------------------------------------------------------------
 
-type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; loading: boolean };
+type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; recommended: string; recommendedWei: bigint; loading: boolean };
 
 function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
@@ -946,13 +946,13 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
     const networks = DEFAULT_NETWORKS;
     const initial: TreasuryBalance[] = networks.map(n => ({
       chainId: n.chainId, name: n.displayName, explorerURL: n.explorerURL,
-      balance: '...', wei: 0n, loading: true,
+      balance: '...', wei: 0n, recommended: '...', recommendedWei: 0n, loading: true,
     }));
     setBalances(initial);
     for (const net of networks) {
       fetchTreasuryBalance(addr, net.chainId).then(result => {
         setBalances(prev => prev.map(b =>
-          b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, loading: false } : b
+          b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, recommended: result.recommendedFormatted, recommendedWei: result.recommendedWei, loading: false } : b
         ));
       });
     }
@@ -1046,7 +1046,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
             </Text>
             <VelaCard style={{ padding: 0 }}>
               {balances.map((b, i) => {
-                const needsFunding = !b.loading && b.wei < 10_000_000_000_000_000n; // < 0.01 ETH
+                const needsFunding = !b.loading && b.wei < b.recommendedWei;
                 const explorerLink = `${b.explorerURL}/address/${address}`;
                 return (
                   <View key={b.chainId}>
@@ -1054,9 +1054,16 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
                       style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: space.md }}
                       onPress={() => openURL(explorerLink)}
                     >
-                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                        <Text style={{ fontSize: text.sm, ...inter.medium, color: color.fg.base }}>{b.name}</Text>
-                        <ExternalLink size={10} color={color.fg.subtle} strokeWidth={2} />
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                          <Text style={{ fontSize: text.sm, ...inter.medium, color: color.fg.base }}>{b.name}</Text>
+                          <ExternalLink size={10} color={color.fg.subtle} strokeWidth={2} />
+                        </View>
+                        {!b.loading && needsFunding && (
+                          <Text style={{ fontSize: text.xs, ...inter.regular, color: color.fg.muted, marginTop: 2 }}>
+                            min {b.recommended}
+                          </Text>
+                        )}
                       </View>
                       {b.loading ? (
                         <ActivityIndicator size="small" color={color.fg.subtle} />
@@ -1094,22 +1101,37 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
   );
 }
 
-/** Fetch treasury balance using the RPC pool (auto-fallback on failure). */
-async function fetchTreasuryBalance(address: string, chainId: number): Promise<{ formatted: string; wei: bigint }> {
+/** Fetch treasury balance and recommended minimum using the RPC pool. */
+async function fetchTreasuryBalance(address: string, chainId: number): Promise<{
+  formatted: string; wei: bigint; recommendedFormatted: string; recommendedWei: bigint;
+}> {
   try {
-    const res = await poolRpcCall('eth_getBalance', [address, 'latest'], chainId);
-    const wei = BigInt((res.result as string) ?? '0x0');
-    const eth = Number(wei) / 1e18;
-    let formatted: string;
-    if (eth === 0) formatted = '0';
-    else if (eth < 0.000001) formatted = '< 0.000001';
-    else if (eth < 0.001) formatted = eth.toFixed(6);
-    else if (eth < 1) formatted = eth.toFixed(4);
-    else formatted = eth.toFixed(3);
-    return { formatted, wei };
+    const [balRes, gasPriceRes] = await Promise.all([
+      poolRpcCall('eth_getBalance', [address, 'latest'], chainId),
+      poolRpcCall('eth_gasPrice', [], chainId),
+    ]);
+    const wei = BigInt((balRes.result as string) ?? '0x0');
+    const gasPrice = BigInt((gasPriceRes.result as string) ?? '0x0');
+    // Recommended: gasPrice × 10M gas — enough to sponsor ~15-20 new users
+    const recommendedWei = gasPrice * 10_000_000n;
+    return {
+      formatted: formatEth(wei),
+      wei,
+      recommendedFormatted: formatEth(recommendedWei),
+      recommendedWei,
+    };
   } catch {
-    return { formatted: 'error', wei: 0n };
+    return { formatted: 'error', wei: 0n, recommendedFormatted: '?', recommendedWei: 0n };
   }
+}
+
+function formatEth(wei: bigint): string {
+  const eth = Number(wei) / 1e18;
+  if (eth === 0) return '0';
+  if (eth < 0.000001) return '< 0.000001';
+  if (eth < 0.001) return eth.toFixed(6);
+  if (eth < 1) return eth.toFixed(4);
+  return eth.toFixed(3);
 }
 
 // ---------------------------------------------------------------------------
