@@ -327,30 +327,31 @@ export default function SendScreen() {
         import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
       }
 
-      // Show confirm screen right away
+      // Estimate gas + check/sponsor bundler funding BEFORE advancing to confirm.
+      // This ensures the user never sees a flash-back from confirm to enter-details.
       setEstimatingGas(true);
       setFeeEstimate(null);
+
+      try {
+        const [feeResult] = await Promise.allSettled([
+          estimateTransactionFee(activeAccount.address, chainId, gasTier),
+          fetchBundlerAccountInfo(chainId, activeAccount.address),
+        ]);
+
+        const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
+        setFeeEstimate(fee);
+
+        const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
+        if (funding) {
+          setFundingNeeded(funding);
+          // Stay on enter-details — don't advance to confirm
+          setEstimatingGas(false);
+          return;
+        }
+      } catch { /* proceed */ }
+
+      setEstimatingGas(false);
       setStep('confirm');
-
-      // Load gas + check bundler funding in background
-      (async () => {
-        try {
-          const [feeResult] = await Promise.allSettled([
-            estimateTransactionFee(activeAccount.address, chainId, gasTier),
-            fetchBundlerAccountInfo(chainId, activeAccount.address),
-          ]);
-
-          const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
-          setFeeEstimate(fee);
-
-          const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
-          if (funding) {
-            setFundingNeeded(funding);
-            setStep('enter-details'); // Go back — can't proceed without funding
-          }
-        } catch { /* proceed */ }
-        setEstimatingGas(false);
-      })();
     } else {
       setStep('confirm');
     }
@@ -777,10 +778,11 @@ export default function SendScreen() {
           )}
 
           <VelaButton
-            title="Continue"
+            title={estimatingGas ? 'Preparing...' : 'Continue'}
             onPress={handleContinue}
+            loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={!recipient || !amount || fundingNeeded?.reason === 'wallet_balance_too_low'}
+            disabled={!recipient || !amount || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low'}
           />
         </Animated.View>
       </ScrollView>
