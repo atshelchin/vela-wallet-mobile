@@ -206,7 +206,7 @@ export async function estimateTransactionFee(
   // Layer 1: bundler gas price = raw × tier multiplier (what bundler actually pays)
   const m = GAS_TIER_MULTIPLIERS[tier];
   let bundlerGasPrice = (onChainGasPrice * m.num) / m.den;
-  const MIN_FEE = 1_000_000n;
+  const MIN_FEE = 1_000n;
   if (bundlerGasPrice < MIN_FEE) bundlerGasPrice = MIN_FEE;
 
   // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.6 (60% bundler profit margin)
